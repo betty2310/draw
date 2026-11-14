@@ -149,7 +149,7 @@ Size limits apply to version 1. A compressed scene has a maximum of 1.5 MB, and 
 - [x] Run `vp dev` with the Cloudflare plugin. The page, one API route and one Durable Object with SQLite and WebSocket must work on the local machine.
 - [x] Make `vp check` and `vp test` pass, with one test of the Durable Object.
 - [x] Deploy to your Cloudflare account with `wrangler deploy`.
-- [ ] Measure the save time from Vietnam for payloads of 50 KB, 300 KB and 1 MB. Measure the Worker CPU time for the same payloads. The CPU time is measured. The save time from Vietnam is not measured yet.
+- [x] Measure the save time from Vietnam for payloads of 50 KB, 300 KB and 1 MB. Measure the Worker CPU time for the same payloads.
 
 Phase 0 is done when the deployed page saves a test payload through the WebSocket, and the measured numbers are in this plan.
 
@@ -182,13 +182,20 @@ The results are as follows.
 - A save of 1 MB uses at most 4 ms of CPU time. That is below the 10 ms limit of the Workers Free plan, which is the strictest limit that can apply to a Durable Object. The CPU limit is not a risk for saves.
 - Each save waits about 45 to 60 ms in the object, with almost no CPU time. The cause is probably the wait for the confirmation of the SQLite write before the reply. This time does not change with the distance to the browser.
 
-Save time from Vietnam: not measured yet. The owner runs the save test from Vietnam and sends the result.
+Save time from Vietnam, measured by the owner on 2026-11-14 with Chrome on macOS. The Worker and the Durable Object ran in SIN (Singapore). Each size has 10 saves.
 
-| Payload | Median | 90th percentile |
-| --- | --- | --- |
-| 50 KB | not measured | not measured |
-| 300 KB | not measured | not measured |
-| 1 MB | not measured | not measured |
+| Payload | Median | 90th percentile | Max |
+| --- | --- | --- | --- |
+| 50 KB | 87 ms | 170 ms | 188 ms |
+| 300 KB | 107 ms | 171 ms | 267 ms |
+| 1 MB | 179 ms | 219 ms | 259 ms |
+
+The WebSocket connected in 567 ms. The first save of 1 KB, which also created the Durable Object, took 72 ms.
+
+The results are as follows.
+
+- A save of 1 MB from Vietnam takes less than 0.3 s. Autosave sends the scene 2 seconds after the last change, so a second browser can show the change in about 2.3 s. That is within the 3 seconds of the Phase 1 check.
+- About 45 to 60 ms of each save is the wait in the object. The rest is the network from Vietnam to Singapore and the upload of the bytes.
 
 ### Phase 1. Editor, projects and autosave
 
@@ -250,7 +257,7 @@ The plan has no UI component library and no router library. The app has two page
 - A version with no name is deleted after 30 days. Give a name to each version that you want to keep.
 - The pinned Excalidraw build is not a release. A later build can change the `Fonts` class or the minimap. The signal is a type error or mixed fonts after an upgrade.
 - Vite+ with the Cloudflare plugin works in Phase 0 for dev, build and deploy. If a later version breaks it, the fallback is `wrangler dev` for the Worker and a Vite proxy for `/api`.
-- A save of 1 MB uses at most 4 ms of the 10 ms CPU limit. The network time from Vietnam is not measured yet. See "Phase 0 results".
+- A save of 1 MB uses at most 4 ms of the 10 ms CPU limit, and it takes less than 0.3 s from Vietnam. See "Phase 0 results".
 
 ## Out of scope
 
