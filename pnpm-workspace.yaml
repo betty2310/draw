@@ -6,7 +6,9 @@ packages:
 catalogMode: prefer
 
 catalog:
+  "@excalidraw/excalidraw": 0.18.0-3a317b5
   "@types/node": ^24
+  idb-keyval: ^6.3.0
   typescript: ^7.0.2
   vite: npm:@voidzero-dev/vite-plus-core@1.6.0
   vite-plus: 1.6.0
@@ -19,6 +21,11 @@ peerDependencyRules:
     vite: "*"
 minimumReleaseAgeExclude:
   - "@cloudflare/workers-types@5.20261114.1"
+  - "@excalidraw/common@0.18.0-3a317b5"
+  - "@excalidraw/element@0.18.0-3a317b5"
+  - "@excalidraw/excalidraw@0.18.0-3a317b5"
+  - "@excalidraw/fractional-indexing@0.18.0-3a317b5"
+  - "@excalidraw/math@0.18.0-3a317b5"
 allowBuilds:
   esbuild: true
   workerd: true

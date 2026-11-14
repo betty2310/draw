@@ -1,92 +1,69 @@
-import { useState } from "react";
-import { formatSize, measureSaves, percentile, type MeasureResult } from "./measure.ts";
+import { lazy, Suspense, useEffect, useState } from "react";
+import { getAuthor, setAuthor } from "./api.ts";
+import { ProjectList } from "./ProjectList.tsx";
 
-type State =
-  | { kind: "idle" }
-  | { kind: "running"; step: string }
-  | { kind: "done"; result: MeasureResult }
-  | { kind: "failed"; error: string };
+// The editor is large, so the project list loads without it.
+const Editor = lazy(() => import("./Editor.tsx"));
 
-const ms = (value: number) => `${Math.round(value)} ms`;
+const projectIdFromPath = (path: string) => /^\/p\/([\w-]+)$/.exec(path)?.[1] ?? null;
 
 export function App() {
-  const [state, setState] = useState<State>({ kind: "idle" });
+  const [path, setPath] = useState(location.pathname);
+  const [author, setAuthorState] = useState(getAuthor());
 
-  async function run() {
-    setState({ kind: "running", step: "Starting" });
-    try {
-      const result = await measureSaves((step) => setState({ kind: "running", step }));
-      setState({ kind: "done", result });
-    } catch (error) {
-      setState({ kind: "failed", error: String(error) });
-    }
+  useEffect(() => {
+    const onPopState = () => setPath(location.pathname);
+    addEventListener("popstate", onPopState);
+    return () => removeEventListener("popstate", onPopState);
+  }, []);
+
+  if (!author) {
+    return (
+      <NamePrompt
+        onDone={(name) => {
+          setAuthor(name);
+          setAuthorState(name);
+        }}
+      />
+    );
   }
 
-  return (
-    <main>
-      <h1>draw</h1>
-      <p>
-        Save test. The page saves random bytes of 50 KB, 300 KB and 1 MB through the WebSocket of a
-        new project, 10 times for each size, and shows the time from send to the server reply.
-      </p>
-      <button type="button" onClick={run} disabled={state.kind === "running"}>
-        Run save test
-      </button>
-      {state.kind === "running" && <p role="status">{state.step}</p>}
-      {state.kind === "failed" && <p role="alert">{state.error}</p>}
-      {state.kind === "done" && <Results result={state.result} />}
-    </main>
-  );
+  const projectId = projectIdFromPath(path);
+  if (projectId) {
+    return (
+      <Suspense fallback={<p className="page-note">Loading</p>}>
+        <Editor key={projectId} projectId={projectId} />
+      </Suspense>
+    );
+  }
+  return <ProjectList author={author} />;
 }
 
-function Results({ result }: { result: MeasureResult }) {
-  const summary = {
-    ...result,
-    sizes: result.sizes.map(({ size, timesMs }) => ({
-      size: formatSize(size),
-      medianMs: Math.round(percentile(timesMs, 50)),
-      p90Ms: Math.round(percentile(timesMs, 90)),
-      maxMs: Math.round(Math.max(...timesMs)),
-    })),
-    connectMs: Math.round(result.connectMs),
-    firstSaveMs: Math.round(result.firstSaveMs),
-    raw: result.sizes.map(({ size, timesMs }) => ({ size, timesMs: timesMs.map(Math.round) })),
-  };
-  const text = JSON.stringify(summary, null, 2);
+function NamePrompt({ onDone }: { onDone: (name: string) => void }) {
+  const [name, setName] = useState("");
   return (
-    <section>
-      <p>
-        Worker data center: <b>{result.workerColo}</b>. Durable Object data center:{" "}
-        <b>{result.objectColo}</b>. Connect: {ms(result.connectMs)}. First save of 1 KB, which also
-        creates the Durable Object: {ms(result.firstSaveMs)}.
-      </p>
-      <table>
-        <thead>
-          <tr>
-            <th>Payload</th>
-            <th>Median</th>
-            <th>90th percentile</th>
-            <th>Max</th>
-          </tr>
-        </thead>
-        <tbody>
-          {summary.sizes.map((row) => (
-            <tr key={row.size}>
-              <td>{row.size}</td>
-              <td>{row.medianMs} ms</td>
-              <td>{row.p90Ms} ms</td>
-              <td>{row.maxMs} ms</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-      <p>
-        Copy this text and send it back:{" "}
-        <button type="button" onClick={() => navigator.clipboard.writeText(text)}>
-          Copy
+    <main className="page">
+      <h1>draw</h1>
+      <form
+        className="name-prompt"
+        onSubmit={(event) => {
+          event.preventDefault();
+          if (name.trim()) onDone(name.trim());
+        }}
+      >
+        <label htmlFor="author">Your name</label>
+        <p>Each version that you save shows this name. This browser keeps it.</p>
+        <input
+          id="author"
+          value={name}
+          maxLength={100}
+          autoFocus
+          onChange={(event) => setName(event.target.value)}
+        />
+        <button type="submit" disabled={!name.trim()}>
+          Continue
         </button>
-      </p>
-      <textarea readOnly rows={12} value={text} />
-    </section>
+      </form>
+    </main>
   );
 }

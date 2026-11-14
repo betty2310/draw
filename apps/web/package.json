@@ -12,6 +12,8 @@
   "dependencies": {
     "@draw/server": "workspace:*",
     "@draw/shared": "workspace:*",
+    "@excalidraw/excalidraw": "catalog:",
+    "idb-keyval": "catalog:",
     "react": "^19.3.1",
     "react-dom": "^19.3.1"
   },
