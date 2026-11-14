@@ -1,6 +1,6 @@
 # Diagram app plan
 
-Version 1 is an Excalidraw editor with a project list, autosave, a version history with named versions, and branches, on the Cloudflare free plan. The plan has three phases. The code of Phase 0 is in the repository.
+Version 1 is an Excalidraw editor with a project list, autosave, a version history with named versions, and branches, on the Cloudflare free plan. The plan has three phases. The code of Phase 0 and Phase 1 is in the repository.
 
 The repository name and the version rules are in "Decisions".
 
@@ -155,7 +155,7 @@ Phase 0 is done when the deployed page saves a test payload through the WebSocke
 
 #### Phase 0 results
 
-The app is deployed at https://draw.huynhduongsh1.workers.dev. The page has a "Run save test" button. The test creates a new project, saves random bytes of 50 KB, 300 KB and 1 MB through the WebSocket, 10 times for each size, and shows the time from send to the server reply. The server replies with the SHA-256 of the stored bytes, and the page checks it.
+The app is deployed at https://draw.huynhduongsh1.workers.dev. The page had a "Run save test" button until Phase 1 replaced it with the editor. The test creates a new project, saves random bytes of 50 KB, 300 KB and 1 MB through the WebSocket, 10 times for each size, and shows the time from send to the server reply. The server replies with the SHA-256 of the stored bytes, and the page checks it.
 
 Random bytes do not compress, so each size is the size on the network, the same as a gzip scene of that size.
 
@@ -199,21 +199,43 @@ The results are as follows.
 
 ### Phase 1. Editor, projects and autosave
 
-- [ ] Editor page with the pinned Excalidraw build, the minimap on, and the three fonts.
-- [ ] The 13 default libraries, loaded when the editor opens for the first time.
-- [ ] Project list page: create, rename, move to trash, restore, with a thumbnail for each project.
-- [ ] Name prompt at the first visit. The browser stores the name.
-- [ ] Autosave: to IndexedDB immediately, and to the server 2 seconds after the last change. A status text shows "Saved", "Saving" or "Offline, saved in this browser".
-- [ ] The `versions` table with the 5 minute rule. Phase 1 writes the versions, and Phase 2 shows them.
-- [ ] One editor for each branch. A second person gets a read-only view that updates after each save, and a "Take over" button.
-- [ ] Pasted images, stored in the `images` table.
-- [ ] Import and export of `.excalidraw` files.
+- [x] Editor page with the pinned Excalidraw build, the minimap on, and the three fonts.
+- [x] The 13 default libraries, loaded when the editor opens for the first time.
+- [x] Project list page: create, rename, move to trash, restore, with a thumbnail for each project.
+- [x] Name prompt at the first visit. The browser stores the name.
+- [x] Autosave: to IndexedDB immediately, and to the server 2 seconds after the last change. A status text shows "Saved", "Saving" or "Offline, saved in this browser".
+- [x] The `versions` table with the 5 minute rule. Phase 1 writes the versions, and Phase 2 shows them.
+- [x] One editor for each branch. A second person gets a read-only view that updates after each save, and a "Take over" button.
+- [x] Pasted images, stored in the `images` table.
+- [x] Import and export of `.excalidraw` files.
 
 Phase 1 is done when these checks pass on the deployed app.
 
 - You draw, close the tab during a change, and open the project again. No change is lost.
 - A second browser shows your change no more than 3 seconds after you stop drawing.
 - You draw without a network connection, and the app sends the changes when the connection is back.
+
+#### Phase 1 results
+
+The three checks passed on the deployed app on 2026-11-14, with two headless Chromium browsers in the orb (Worker in SEA). Each check read the local copy of the editor and the copy of the second browser, which is the server scene.
+
+| Check | Result |
+| --- | --- |
+| Close the tab during a change | The tab closed 12 ms after a new shape, before the server save. The server did not have the shape 4 s later. After the project opened again, the shape was there and the server had it. A second test closed the tab during a drag, with the mouse button down. The moved shapes were also kept and saved. |
+| Second browser in 3 seconds | 5 runs: 2,060 to 2,092 ms from the mouse release to the change in the second browser. |
+| Draw offline | The status showed "Offline, saved in this browser", and the server did not have the 2 new shapes. The second browser showed them 224 ms after the network was back. |
+
+These facts are different from the plan or are new.
+
+- A save is one binary WebSocket message: a JSON header with the hash that the browser last saw, and the gzip scene. The server sends a scene to the browser in the same form. A browser that connects tells the hash that it has, and the server sends the scene only if it is different.
+- When the server refuses a save with an old hash, the browser merges its changes into the server scene with `reconcileElements` and saves again. Test: the first browser drew offline, the second browser took over and drew, then the first browser took over again. The server had the shapes of both browsers.
+- A browser that loses the edit lock while it has unsaved changes keeps them in IndexedDB. It merges them when it edits again.
+- The edit lock belongs to one page load. A page that connects again, for example after a network change, keeps the lock. A different tab of the same person is a second browser.
+- Deleted elements stay in the saved scene, so a merge does not bring them back.
+- Shantell Sans comes from release 1.011 of `arrowtype/shantell-sans`, not from the tldraw package. The OFL license files are next to the fonts.
+- The Worker creates the D1 `projects` table at the first request of each Worker instance, so a new database needs no manual step.
+- The project list gets a new thumbnail at most each 10 seconds while you draw, with the save time.
+- The tests start the real Worker and Durable Object in workerd. They cover the open version, the refused save with an old hash, the edit lock with "Take over", a page that connects again, the project API, and the images. A unit test covers the 5 minute rule.
 
 ### Phase 2. Version history, named versions and branches
 

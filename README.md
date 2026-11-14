@@ -4,8 +4,8 @@ A diagram app: an Excalidraw editor with a project list, autosave, a version his
 
 The plan is in [docs/plan.md](docs/plan.md). It has three phases:
 
-- Phase 0: project skeleton, local run, first deploy, measurements. The deployed page is a save test.
-- Phase 1: editor, projects and autosave.
+- Phase 0: project skeleton, local run, first deploy, measurements.
+- Phase 1: editor, projects and autosave. This is the deployed app.
 - Phase 2: version history, named versions and branches.
 
 The app is deployed at https://draw.huynhduongsh1.workers.dev.
