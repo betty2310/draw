@@ -1,6 +1,6 @@
 # Diagram app plan
 
-Version 1 is an Excalidraw editor with a project list, autosave, a version history with named versions, and branches, on the Cloudflare free plan. The plan has three phases. The code of Phase 0 and Phase 1 is in the repository.
+Version 1 is an Excalidraw editor with a project list, autosave, a version history with named versions, and branches, on the Cloudflare free plan. The plan has three phases. The code of Phase 0, Phase 1 and Phase 2 is in the repository.
 
 The repository name and the version rules are in "Decisions".
 
@@ -239,15 +239,68 @@ These facts are different from the plan or are new.
 
 ### Phase 2. Version history, named versions and branches
 
-- [ ] History panel in the Excalidraw sidebar. It lists the versions of the current branch with the newest first, and each row shows the name, the author and the time. A filter shows the named versions only.
-- [ ] Read-only preview of a version on the canvas.
-- [ ] "Name this version" on each row. `Ctrl+S` gives a name to the current version.
-- [ ] "Restore this version".
-- [ ] "Create branch from this version".
-- [ ] Branch selector: switch, rename, delete. `main` cannot be deleted.
-- [ ] Delete of old versions with no name, at most one time each day for each project.
+- [x] History panel in the Excalidraw sidebar. It lists the versions of the current branch with the newest first, and each row shows the name, the author and the time. A filter shows the named versions only.
+- [x] Read-only preview of a version on the canvas.
+- [x] "Name this version" on each row. `Ctrl+S` gives a name to the current version.
+- [x] "Restore this version".
+- [x] "Create branch from this version".
+- [x] Branch selector: switch, rename, delete. `main` cannot be deleted.
+- [x] Delete of old versions with no name, at most one time each day for each project.
 
 Phase 2 is done when tests of the Durable Object cover the version rules, restore, branch and the delete of old versions, and screenshots show each flow in the deployed app.
+
+#### Phase 2 results
+
+Phase 2 is deployed at https://draw.huynhduongsh1.workers.dev (Worker version `9fb61fed`). Each flow was done on the deployed app on 2026-11-14 with two headless Chromium browsers in the orb, "Betty" and "Minh", on the project "Phase 2 checks". The screenshots are in the thread report.
+
+![History panel of main. The version "Two services" shows the branch that was created from it.](images/phase2-history-panel.png)
+
+| Flow | Result on the deployed app |
+| --- | --- |
+| History panel | The "History" button and the main menu open the panel. It shows the branch selector, the filter "Named versions only", and the versions with the newest first. Each row shows the name or "No name", the author, the time of the last save, "Current" on the newest version, and the branches that start at the version. |
+| Read-only viewer | Minh took over and drew. Betty saw "Read-only. Minh edits.", the version of Minh in the list, and "Restore" disabled on each row. |
+| `Ctrl+S` | A dialog asks for the name. The local changes are saved first, so the name is on the version that has them. The name closes the version, and the next save adds a new version. |
+| Preview | A click on a row shows the version in a second, read-only editor over the canvas, with "Restore this version", "Create branch from this version" and "Close preview". The docked panel stays visible. `Escape` closes the preview. |
+| Restore | "Add database" was restored. A new version (version 5, author Betty) got its drawing, and versions 1 to 4 stayed. Minh's read-only browser showed the restored drawing at the same time. |
+| Create branch | A branch "Cache layer" was created from "Two services". The page opened the branch with the same drawing, and the panel stayed open. A new shape on the branch did not change `main`. |
+| Rename | "Cache layer" became "Redis cache". Both browsers changed to the new name without a new connection, and the URL changed. |
+| Switch | The branch selector opened `main` and then "Redis cache" again. |
+| Delete | After a confirm, the branch and all its versions were deleted. Betty went to `main`. Minh, who viewed the branch, went to `main` with the notice "The branch "Redis cache" was deleted". `main` has no "Rename" or "Delete" button, and the server refuses both. |
+
+The delete of old versions has no screen. The tests cover it.
+
+Test output of `vp test`:
+
+```text
+ Test Files  2 passed (2)
+      Tests  11 passed (11)
+```
+
+The 4 new tests start the real Worker and Durable Object in workerd. A test Worker (`packages/server/test/worker.ts`) is the production Worker with one change: the Durable Object reads the time from a clock that the test can move, and a test route runs the delete of old versions at once.
+
+| Test | It checks |
+| --- | --- |
+| Version rules | A save at 4 minutes writes into the same version. A save at 5 minutes adds a version. A name closes the version early, and each browser of the branch gets a notice. The filter returns the named versions only. An empty name removes the name. |
+| Restore | A viewer cannot restore. A restore from an old hash is refused, with the current scene. A restore adds a new version with the exact bytes of the old version, sends them to the editor and the viewer, and removes no version. |
+| Branch | Create, the copy of the scene in the first version of the branch, the edit lock of the new branch, separate versions for each branch, a name that exists (409), rename with an open connection that continues to save, `main` cannot be renamed or deleted, delete closes the connections of the branch, and a browser that comes back to a deleted branch is sent to `main`. |
+| Delete of old versions | At 29 days nothing is deleted. After 30 days, the versions with no name are deleted, except the newest version of each branch and the version that a branch was created from. Named versions stay. The first new version sets the next run for one day later. |
+
+To prove the tests, I broke the code 4 times, one change each time: no protected versions in the delete, a restore with an old hash, a branch delete that keeps the versions, and a rename that does not move the connections. Each time one test failed.
+
+These facts are different from the plan or are new.
+
+- The branch is in the URL, as `/p/<id>?branch=<name>`. `main` has no parameter. The browser keeps a local copy for each branch.
+- Restore is a WebSocket message from the editor of the branch, with the hash that the browser last saw. The server sends the restored scene to each browser of the branch. The browser saves its local changes before the restore, so they stay in the history.
+- The restored version has no name, and its author is the person who restored.
+- The delete of old versions uses a Durable Object alarm. The first new version of a project sets it for one day later. After each run, the alarm is set again only if a version can still expire. The age of a version is the time of its last save.
+- The delete of a branch deletes all its versions, also the named versions. The dialog says this. Tell me if named versions must stay after the delete of a branch.
+- The project list thumbnail shows `main` only.
+- `Ctrl+S` gives a name. The main menu item "Save to..." still saves a `.excalidraw` file.
+
+The work has these limits.
+
+- A browser that was offline on a branch, and comes back after a rename or a delete of that branch, opens `main`. Its unsaved offline changes on that branch stay in IndexedDB, but the app does not show them.
+- A restore replaces the scene. If a browser has unsaved changes from before the restore and takes over later, the merge can bring back elements that the restore removed.
 
 ### Later, not planned in detail
 
