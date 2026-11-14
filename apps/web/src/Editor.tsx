@@ -437,7 +437,12 @@ export default function Editor({ projectId, branch }: { projectId: string; branc
           projectId={projectId}
           version={preview.version}
           json={preview.json}
-          canRestore={role === "editor" && preview.version.id !== headVersionId}
+          // The History panel also previews versions of other branches. A restore stays in a branch.
+          canRestore={
+            role === "editor" &&
+            preview.version.branch === currentBranch &&
+            preview.version.id !== headVersionId
+          }
           onRestore={() => restore(preview.version)}
           onBranch={() => branchFrom(preview.version)}
           onClose={() => setPreview(null)}

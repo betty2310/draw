@@ -248,13 +248,17 @@ export class ProjectRepo extends DurableObject<Env> {
     return row ?? null;
   }
 
-  /** The versions of a branch, newest first. */
-  async listVersions(branch: string, namedOnly: boolean, limit: number): Promise<VersionInfo[]> {
+  /** The versions of one branch, or of all branches when `branch` is null, newest first. */
+  async listVersions(
+    branch: string | null,
+    namedOnly: boolean,
+    limit: number,
+  ): Promise<VersionInfo[]> {
+    const where = [branch === null ? "1" : "branch = ?", namedOnly ? "name != ''" : "1"];
     return this.ctx.storage.sql
       .exec<VersionInfoRow>(
-        `${VERSION_INFO_SELECT} WHERE branch = ? ${namedOnly ? "AND name != ''" : ""}
-         ORDER BY id DESC LIMIT ?`,
-        branch,
+        `${VERSION_INFO_SELECT} WHERE ${where.join(" AND ")} ORDER BY id DESC LIMIT ?`,
+        ...(branch === null ? [] : [branch]),
         Math.min(Math.max(Math.trunc(limit) || 1, 1), 500),
       )
       .toArray()
@@ -279,7 +283,8 @@ export class ProjectRepo extends DurableObject<Env> {
       )
       .toArray()[0];
     if (!updated) return { error: "The version does not exist", status: 404 };
-    this.#notify(updated.branch, { type: "history" });
+    // The History panel shows the versions of all branches.
+    this.#notify(null, { type: "history" });
     return toVersionInfo(
       this.ctx.storage.sql
         .exec<VersionInfoRow>(`${VERSION_INFO_SELECT} WHERE id = ?`, versionId)
@@ -408,7 +413,9 @@ export class ProjectRepo extends DurableObject<Env> {
     for (const other of this.#sockets(branch)) {
       if (other.ws !== ws) other.ws.send(frame);
     }
-    if (!open) await this.#scheduleCleanup();
+    if (open) return;
+    this.#notifyOtherBranches(branch);
+    await this.#scheduleCleanup();
   }
 
   /** Adds a new version with a copy of an old version of the same branch. No version is removed. */
@@ -437,6 +444,7 @@ export class ProjectRepo extends DurableObject<Env> {
       new Uint8Array(source.scene),
     );
     for (const other of this.#sockets(branch)) other.ws.send(frame);
+    this.#notifyOtherBranches(branch);
     await this.#scheduleCleanup();
   }
 
@@ -498,6 +506,13 @@ export class ProjectRepo extends DurableObject<Env> {
 
   #notify(branch: string | null, message: ServerMessage) {
     for (const { ws } of this.#sockets(branch)) send(ws, message);
+  }
+
+  /** The History panel shows all branches, so a new version on one branch changes it for all. */
+  #notifyOtherBranches(branch: string) {
+    for (const other of this.#sockets(null)) {
+      if (other.attachment.branch !== branch) send(other.ws, { type: "history" });
+    }
   }
 
   #branchExists(branch: string) {

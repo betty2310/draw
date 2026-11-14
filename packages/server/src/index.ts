@@ -165,7 +165,7 @@ export const app = new Hono<{ Bindings: Env }>()
   })
   .get("/api/projects/:id/versions", async (c) => {
     const versions = await repo(c.env, c.req.param("id")).listVersions(
-      c.req.query("branch") ?? MAIN_BRANCH,
+      c.req.query("all") === "1" ? null : (c.req.query("branch") ?? MAIN_BRANCH),
       c.req.query("named") === "1",
       Number(c.req.query("limit") ?? 100),
     );

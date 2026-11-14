@@ -33,14 +33,10 @@ export const createProject = (name: string) =>
 export const updateProject = (id: string, patch: ProjectPatch) =>
   request<Project>(`/api/projects/${id}`, { method: "PATCH", body: JSON.stringify(patch) });
 
-export const listVersions = (
-  projectId: string,
-  branch: string,
-  namedOnly: boolean,
-  limit: number,
-) =>
+/** The versions of all branches, newest first. */
+export const listVersions = (projectId: string, namedOnly: boolean, limit: number) =>
   request<VersionInfo[]>(
-    `${versionPath(projectId)}?${new URLSearchParams({ branch, named: namedOnly ? "1" : "0", limit: String(limit) })}`,
+    `${versionPath(projectId)}?${new URLSearchParams({ all: "1", named: namedOnly ? "1" : "0", limit: String(limit) })}`,
   );
 
 /** The scene of a version as `.excalidraw` JSON. */

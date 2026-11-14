@@ -365,6 +365,24 @@ test("branches: create from a version, edit apart, rename and delete", async () 
   expect((await versions("p-branch", "idea")).map((v) => v.id)).toEqual([ideaSave.versionId]);
   expect((await versions("p-branch")).map((v) => v.id)).toEqual([v2.versionId, v1.versionId]);
 
+  // The History panel lists the versions of all branches, newest first, and each panel
+  // refreshes when a version of any branch gets a name.
+  const all = await call<VersionInfo[]>(`${versionPath("p-branch")}?all=1`);
+  expect(all.body.map((v) => [v.id, v.branch])).toEqual([
+    [v2.versionId, "main"],
+    [ideaSave.versionId, "idea"],
+    [v1.versionId, "main"],
+  ]);
+  await call(versionPath("p-branch", v1.versionId), json("PATCH", { name: "Base" }));
+  expect(await idea.next()).toEqual({ type: "history" });
+  expect(await main.next()).toEqual({ type: "history" });
+  const named = await call<VersionInfo[]>(`${versionPath("p-branch")}?all=1&named=1`);
+  expect(named.body.map((v) => v.id)).toEqual([v1.versionId]);
+  // A new version on one branch refreshes the panel on the other branches too.
+  await moveClock("p-branch", 6 * MINUTE);
+  const ideaNext = await idea.saveOk(ideaSave.hash, randomBytes(500));
+  expect(await main.next()).toEqual({ type: "history" });
+
   expect(
     (
       await call(
@@ -390,7 +408,7 @@ test("branches: create from a version, edit apart, rename and delete", async () 
   expect(renamed.body.name).toBe("idea 2");
   expect(await idea.next()).toEqual({ type: "branches", renamed: { from: "idea", to: "idea 2" } });
   await main.next();
-  const after = await idea.saveOk(ideaSave.hash, randomBytes(500));
+  const after = await idea.saveOk(ideaNext.hash, randomBytes(500));
   expect((await versions("p-branch", "idea 2"))[0]!.id).toBe(after.versionId);
   expect((await versions("p-branch"))[1]!.branches).toEqual(["idea 2"]);
 

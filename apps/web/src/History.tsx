@@ -1,9 +1,17 @@
+import { Badge, Button, Select, Switch } from "@cloudflare/kumo";
 import { Excalidraw, restoreElements } from "@excalidraw/excalidraw";
 import type { ExcalidrawElement, FileId } from "@excalidraw/excalidraw/element/types";
 import type { ExcalidrawImperativeAPI } from "@excalidraw/excalidraw/types";
 import { MAIN_BRANCH, type BranchInfo, type Role, type VersionInfo } from "@draw/shared";
-import { useEffect, useRef, useState } from "react";
+import {
+  ArrowCounterClockwiseIcon,
+  GitBranchIcon,
+  PencilSimpleIcon,
+  TrashIcon,
+} from "@phosphor-icons/react";
+import { useEffect, useRef, useState, type CSSProperties } from "react";
 import { listBranches, listVersions } from "./api.ts";
+import { layoutGraph, type GraphRow } from "./graph.ts";
 import { loadImageFile } from "./images.ts";
 
 /** The panel shows this many versions, and "Show more" adds the same number. */
@@ -11,6 +19,19 @@ const PAGE = 100;
 
 const timeFormat = new Intl.DateTimeFormat(undefined, { dateStyle: "medium", timeStyle: "short" });
 export const formatTime = (time: number) => timeFormat.format(time);
+
+const relativeFormat = new Intl.RelativeTimeFormat(undefined, { numeric: "auto", style: "short" });
+const dayFormat = new Intl.DateTimeFormat(undefined, { month: "short", day: "numeric" });
+const clockFormat = new Intl.DateTimeFormat(undefined, { timeStyle: "short" });
+
+/** A short time for a row: "3 min. ago" today, and the date with the time before. */
+function formatAgo(time: number, now: number) {
+  const minutes = Math.round((time - now) / 60_000);
+  if (minutes > -1) return "just now";
+  if (minutes > -60) return relativeFormat.format(minutes, "minute");
+  if (minutes > -12 * 60) return relativeFormat.format(Math.round(minutes / 60), "hour");
+  return `${dayFormat.format(time)}, ${clockFormat.format(time)}`;
+}
 
 export const versionLabel = (version: VersionInfo) =>
   version.name || `Version of ${formatTime(version.updatedAt)}`;
@@ -25,7 +46,7 @@ export interface HistoryActions {
   deleteBranch: (name: string) => void;
 }
 
-/** The content of the History sidebar: the branch selector and the versions of the branch. */
+/** The content of the History sidebar: the branch selector and a graph of the versions of all branches. */
 export function HistoryPanel({
   projectId,
   branch,
@@ -49,14 +70,16 @@ export function HistoryPanel({
   const [namedOnly, setNamedOnly] = useState(false);
   const [limit, setLimit] = useState(PAGE);
   const [error, setError] = useState<string | null>(null);
+  const [now, setNow] = useState(Date.now);
 
   useEffect(() => {
     let current = true;
-    Promise.all([listBranches(projectId), listVersions(projectId, branch, namedOnly, limit)]).then(
+    Promise.all([listBranches(projectId), listVersions(projectId, namedOnly, limit)]).then(
       ([nextBranches, nextVersions]) => {
         if (!current) return;
         setBranches(nextBranches);
         setVersions(nextVersions);
+        setNow(Date.now());
         setError(null);
       },
       (reason: unknown) => current && setError(String(reason)),
@@ -64,47 +87,56 @@ export function HistoryPanel({
     return () => {
       current = false;
     };
-  }, [projectId, branch, namedOnly, limit, tick]);
+  }, [projectId, namedOnly, limit, tick]);
 
-  const info = branches.find((b) => b.name === branch);
+  // "5 min. ago" stays true when nobody saves.
+  useEffect(() => {
+    const timer = setInterval(() => setNow(Date.now()), 60_000);
+    return () => clearInterval(timer);
+  }, []);
+
+  const graph = layoutGraph(versions ?? [], branches);
   return (
-    <div className="history">
+    <div className="history kumo-scope">
       <div className="history__branch">
-        <label htmlFor="branch-select">Branch</label>
-        <select
-          id="branch-select"
+        <span aria-hidden="true">Branch</span>
+        <Select
+          className="history__select"
+          size="sm"
+          aria-label="Branch"
           value={branch}
-          onChange={(event) => actions.switchBranch(event.target.value)}
-        >
-          {branches.length === 0 && <option value={branch}>{branch}</option>}
-          {branches.map((b) => (
-            <option key={b.name} value={b.name}>
-              {b.name}
-            </option>
-          ))}
-        </select>
+          onValueChange={(name) => name && name !== branch && actions.switchBranch(name)}
+          items={Object.fromEntries(
+            (branches.length ? branches.map((b) => b.name) : [branch]).map((name) => [name, name]),
+          )}
+        />
         {branch !== MAIN_BRANCH && (
           <>
-            <button type="button" onClick={() => actions.renameBranch(branch)}>
-              Rename
-            </button>
-            <button type="button" className="danger" onClick={() => actions.deleteBranch(branch)}>
-              Delete
-            </button>
+            <Button
+              size="sm"
+              shape="square"
+              variant="ghost"
+              icon={PencilSimpleIcon}
+              title="Rename this branch"
+              onClick={() => actions.renameBranch(branch)}
+            />
+            <Button
+              size="sm"
+              shape="square"
+              variant="ghost"
+              icon={TrashIcon}
+              title="Delete this branch"
+              onClick={() => actions.deleteBranch(branch)}
+            />
           </>
         )}
       </div>
-      {info?.fromBranch && (
-        <p className="history__note">Created from a version of {info.fromBranch}</p>
-      )}
-      <label className="history__filter">
-        <input
-          type="checkbox"
-          checked={namedOnly}
-          onChange={(event) => setNamedOnly(event.target.checked)}
-        />
-        Named versions only
-      </label>
+      <Switch
+        size="sm"
+        label="Named versions only"
+        checked={namedOnly}
+        onCheckedChange={setNamedOnly}
+      />
       {error && <p role="alert">{error}</p>}
       {versions?.length === 0 && (
         <p className="history__note">
@@ -113,66 +145,187 @@ export function HistoryPanel({
             : "No version yet."}
         </p>
       )}
-      <ol className="history__list" aria-label="Versions">
-        {versions?.map((version) => (
-          <li
-            key={version.id}
-            className="version"
-            aria-current={version.id === previewId ? "true" : undefined}
-            data-version-id={version.id}
-          >
-            <button
-              type="button"
-              className="version__main"
-              title="Preview this version"
-              onClick={() => actions.preview(version)}
-            >
-              <span
-                className={version.name ? "version__name" : "version__name version__name--none"}
-              >
-                {version.name || "No name"}
-              </span>
-              {version.id === headVersionId && <span className="tag">Current</span>}
-              {version.branches.map((name) => (
-                <span key={name} className="tag tag--branch" title={`Branch ${name} starts here`}>
-                  ⑂ {name}
-                </span>
-              ))}
-              <span className="version__meta">
-                {version.author || "Unknown"} · {formatTime(version.updatedAt)}
-              </span>
-            </button>
-            <div className="version__actions">
-              <button type="button" onClick={() => actions.name(version)}>
-                {version.name ? "Rename" : "Name"}
-              </button>
-              <button
-                type="button"
-                disabled={role !== "editor" || version.id === headVersionId}
-                title={
-                  role !== "editor"
-                    ? "Take over the branch to restore a version"
-                    : version.id === headVersionId
-                      ? "This is the current version"
-                      : "Restore this version"
+      <ol
+        className="graph"
+        aria-label="Versions of all branches"
+        style={{ "--graph-width": `${graphWidth(graph.lanes)}px` } as CSSProperties}
+      >
+        {versions?.map((version, index) => {
+          const isHead = version.id === headVersionId;
+          const onBranch = version.branch === branch;
+          const restoreBlock = !onBranch
+            ? `Open the branch ${version.branch} to restore this version`
+            : role !== "editor"
+              ? "Take over the branch to restore a version"
+              : isHead
+                ? "This is the current version"
+                : null;
+          const row = graph.rows[index]!;
+          return (
+            <li
+              key={version.id}
+              className="commit"
+              aria-current={version.id === previewId ? "true" : undefined}
+              data-version-id={version.id}
+              style={{ "--lane-color": laneColor(row.color) } as CSSProperties}
+              // The whole row opens the preview. Keyboard users have the name button.
+              onClick={(event) => {
+                if (!(event.target as Element).closest("button, .commit__actions")) {
+                  actions.preview(version);
                 }
-                onClick={() => actions.restore(version)}
-              >
-                Restore
-              </button>
-              <button type="button" onClick={() => actions.branch(version)}>
-                Branch
-              </button>
-            </div>
-          </li>
-        ))}
+              }}
+            >
+              <GraphCell row={row} named={!!version.name} head={isHead} />
+              <div className="commit__body">
+                <div className="commit__title">
+                  {row.branchTop && (
+                    <BranchLabel
+                      name={version.branch}
+                      open={onBranch}
+                      onOpen={() => actions.switchBranch(version.branch)}
+                    />
+                  )}
+                  <button
+                    type="button"
+                    className={version.name ? "commit__name" : "commit__name commit__name--none"}
+                    title="Preview this version"
+                    onClick={() => actions.preview(version)}
+                  >
+                    {version.name || "Autosave"}
+                  </button>
+                  {isHead && <Badge variant="success">Current</Badge>}
+                </div>
+                <div className="commit__meta">
+                  {version.author || "Unknown"} ·{" "}
+                  <time
+                    dateTime={new Date(version.updatedAt).toISOString()}
+                    title={formatTime(version.updatedAt)}
+                  >
+                    {formatAgo(version.updatedAt, now)}
+                  </time>
+                </div>
+              </div>
+              <div className="commit__actions">
+                <Button
+                  size="sm"
+                  shape="square"
+                  variant="ghost"
+                  icon={PencilSimpleIcon}
+                  title={version.name ? "Rename this version" : "Name this version"}
+                  onClick={() => actions.name(version)}
+                />
+                <Button
+                  size="sm"
+                  shape="square"
+                  variant="ghost"
+                  icon={ArrowCounterClockwiseIcon}
+                  title={restoreBlock ?? "Restore this version"}
+                  aria-label="Restore this version"
+                  disabled={restoreBlock !== null}
+                  onClick={() => actions.restore(version)}
+                />
+                <Button
+                  size="sm"
+                  shape="square"
+                  variant="ghost"
+                  icon={GitBranchIcon}
+                  title="Create branch from this version"
+                  onClick={() => actions.branch(version)}
+                />
+              </div>
+            </li>
+          );
+        })}
       </ol>
       {versions?.length === limit && (
-        <button type="button" className="link" onClick={() => setLimit(limit + PAGE)}>
+        <Button size="sm" variant="ghost" onClick={() => setLimit(limit + PAGE)}>
           Show more
-        </button>
+        </Button>
       )}
     </div>
+  );
+}
+
+/** Distance between lanes, the x of the first lane, and the y of the dot in a row. */
+const LANE = 14;
+const PAD = 10;
+const DOT_Y = 20;
+
+const LANE_COLORS = [
+  "#6965db",
+  "#f76707",
+  "#0ca678",
+  "#e64980",
+  "#1c7ed6",
+  "#f59f00",
+  "#7048e8",
+  "#74b816",
+];
+const laneColor = (color: number) => LANE_COLORS[color % LANE_COLORS.length]!;
+const laneX = (lane: number) => PAD + lane * LANE;
+const graphWidth = (lanes: number) => 2 * PAD + Math.max(lanes - 1, 0) * LANE;
+
+/** The lines and the dot of one row. The lines reach the top and the bottom of the row. */
+function GraphCell({ row, named, head }: { row: GraphRow; named: boolean; head: boolean }) {
+  const x = laneX(row.lane);
+  const color = laneColor(row.color);
+  return (
+    <svg className="commit__graph" aria-hidden="true">
+      {row.through.map((other) => (
+        <line
+          key={other.lane}
+          x1={laneX(other.lane)}
+          x2={laneX(other.lane)}
+          y1="0"
+          y2="100%"
+          stroke={laneColor(other.color)}
+        />
+      ))}
+      {row.forks.map((fork) => {
+        const fx = laneX(fork.lane);
+        return (
+          <path
+            key={fork.lane}
+            d={`M ${fx} 0 C ${fx} ${DOT_Y} ${fx} ${DOT_Y} ${x} ${DOT_Y}`}
+            stroke={laneColor(fork.color)}
+            fill="none"
+          />
+        );
+      })}
+      {row.lineAbove && <line x1={x} x2={x} y1="0" y2={DOT_Y} stroke={color} />}
+      {row.lineBelow && <line x1={x} x2={x} y1={DOT_Y} y2="100%" stroke={color} />}
+      {head && <circle cx={x} cy={DOT_Y} r="8" fill="none" stroke={color} opacity="0.35" />}
+      <circle
+        className={named ? "commit__dot commit__dot--named" : "commit__dot"}
+        cx={x}
+        cy={DOT_Y}
+        r={named ? 5.5 : 4}
+        stroke={color}
+      />
+    </svg>
+  );
+}
+
+/** The name of a branch at its newest row. Another branch opens with a click. */
+function BranchLabel({ name, open, onOpen }: { name: string; open: boolean; onOpen: () => void }) {
+  if (open) {
+    return (
+      <span className="branch-label branch-label--open" title="The open branch">
+        <GitBranchIcon aria-hidden="true" />
+        {name}
+      </span>
+    );
+  }
+  return (
+    <button
+      type="button"
+      className="branch-label"
+      title={`Open the branch ${name}`}
+      onClick={onOpen}
+    >
+      <GitBranchIcon aria-hidden="true" />
+      {name}
+    </button>
   );
 }
 
