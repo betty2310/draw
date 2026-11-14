@@ -79,6 +79,12 @@ const AUTHOR_KEY = "draw.author";
 export const getAuthor = () => localStorage.getItem(AUTHOR_KEY) ?? "";
 export const setAuthor = (name: string) => localStorage.setItem(AUTHOR_KEY, name);
 
+/** Optional. Only this browser keeps it; the server does not get it. */
+const EMAIL_KEY = "draw.email";
+export const getEmail = () => localStorage.getItem(EMAIL_KEY) ?? "";
+export const setEmail = (email: string) =>
+  email ? localStorage.setItem(EMAIL_KEY, email) : localStorage.removeItem(EMAIL_KEY);
+
 /** The app has two pages, so it has no router library. */
 export function navigate(path: string) {
   history.pushState(null, "", path);

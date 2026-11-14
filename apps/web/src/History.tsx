@@ -5,9 +5,11 @@ import type { ExcalidrawImperativeAPI } from "@excalidraw/excalidraw/types";
 import { MAIN_BRANCH, type BranchInfo, type Role, type VersionInfo } from "@draw/shared";
 import {
   ArrowCounterClockwiseIcon,
+  EyeIcon,
   GitBranchIcon,
   PencilSimpleIcon,
   TrashIcon,
+  XIcon,
 } from "@phosphor-icons/react";
 import { useEffect, useRef, useState, type CSSProperties } from "react";
 import { listBranches, listVersions } from "./api.ts";
@@ -370,26 +372,28 @@ export function VersionPreview({
       role="region"
       aria-label="Version preview"
     >
-      <div className="preview__bar">
-        <span>
+      <div className="preview__bar kumo-scope">
+        <EyeIcon size={18} className="shrink-0 text-kumo-warning" />
+        <span className="mr-auto min-w-0 truncate">
           <strong>{versionLabel(version)}</strong> by {version.author || "Unknown"}. Read-only
           preview.
         </span>
-        <button
-          type="button"
-          className="primary"
+        <Button
+          size="sm"
+          variant="primary"
+          icon={ArrowCounterClockwiseIcon}
           disabled={!canRestore}
           title={canRestore ? undefined : "Take over the branch to restore a version"}
           onClick={onRestore}
         >
           Restore this version
-        </button>
-        <button type="button" onClick={onBranch}>
+        </Button>
+        <Button size="sm" icon={GitBranchIcon} onClick={onBranch}>
           Create branch from this version
-        </button>
-        <button type="button" onClick={onClose}>
+        </Button>
+        <Button size="sm" variant="ghost" icon={XIcon} onClick={onClose}>
           Close preview
-        </button>
+        </Button>
       </div>
       <div className="preview__canvas">
         <Excalidraw

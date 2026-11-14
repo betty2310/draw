@@ -1,6 +1,7 @@
+import { Loader } from "@cloudflare/kumo";
 import { MAIN_BRANCH } from "@draw/shared";
 import { lazy, Suspense, useEffect, useState } from "react";
-import { getAuthor, setAuthor } from "./api.ts";
+import { loadProfile, saveProfile, WelcomePage, type Profile } from "./Profile.tsx";
 import { ProjectList } from "./ProjectList.tsx";
 
 // The editor is large, so the project list loads without it.
@@ -12,7 +13,11 @@ export function App() {
   const [path, setPath] = useState(location.pathname);
   // The branch is in the query, so a switch of branch opens a new editor.
   const [search, setSearch] = useState(location.search);
-  const [author, setAuthorState] = useState(getAuthor());
+  const [profile, setProfile] = useState(loadProfile);
+  const changeProfile = (next: Profile) => {
+    saveProfile(next);
+    setProfile(next);
+  };
 
   useEffect(() => {
     const onPopState = () => {
@@ -23,54 +28,24 @@ export function App() {
     return () => removeEventListener("popstate", onPopState);
   }, []);
 
-  if (!author) {
-    return (
-      <NamePrompt
-        onDone={(name) => {
-          setAuthor(name);
-          setAuthorState(name);
-        }}
-      />
-    );
-  }
+  if (!profile.name) return <WelcomePage onDone={changeProfile} />;
 
   const projectId = projectIdFromPath(path);
   if (projectId) {
     const branch = new URLSearchParams(search).get("branch") || MAIN_BRANCH;
     return (
-      <Suspense fallback={<p className="page-note">Loading</p>}>
+      <Suspense fallback={<PageLoader />}>
         <Editor key={`${projectId}:${branch}`} projectId={projectId} branch={branch} />
       </Suspense>
     );
   }
-  return <ProjectList author={author} />;
+  return <ProjectList profile={profile} onProfileChange={changeProfile} />;
 }
 
-function NamePrompt({ onDone }: { onDone: (name: string) => void }) {
-  const [name, setName] = useState("");
+function PageLoader() {
   return (
-    <main className="page">
-      <h1>draw</h1>
-      <form
-        className="name-prompt"
-        onSubmit={(event) => {
-          event.preventDefault();
-          if (name.trim()) onDone(name.trim());
-        }}
-      >
-        <label htmlFor="author">Your name</label>
-        <p>Each version that you save shows this name. This browser keeps it.</p>
-        <input
-          id="author"
-          value={name}
-          maxLength={100}
-          autoFocus
-          onChange={(event) => setName(event.target.value)}
-        />
-        <button type="submit" disabled={!name.trim()}>
-          Continue
-        </button>
-      </form>
-    </main>
+    <div className="grid min-h-screen place-items-center text-kumo-subtle" aria-label="Loading">
+      <Loader size={24} />
+    </div>
   );
 }

@@ -20,8 +20,18 @@ import type {
   ExcalidrawImperativeAPI,
   ExcalidrawInitialDataState,
 } from "@excalidraw/excalidraw/types";
+import { Badge, Button, Loader, Tooltip, useKumoToastManager } from "@cloudflare/kumo";
 import { MAIN_BRANCH, type Project, type VersionInfo } from "@draw/shared";
-import { useCallback, useEffect, useRef, useState } from "react";
+import {
+  ArrowLeftIcon,
+  ClockCounterClockwiseIcon,
+  CloudCheckIcon,
+  CloudSlashIcon,
+  EyeIcon,
+  GitBranchIcon,
+  WarningCircleIcon,
+} from "@phosphor-icons/react";
+import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import {
   createBranch,
   deleteBranch,
@@ -90,11 +100,14 @@ export default function Editor({ projectId, branch }: { projectId: string; branc
   const [dialog, setDialog] = useState<TextDialogProps | null>(null);
   const [sidebarDocked, setSidebarDocked] = useState(true);
   const [historyOpen, setHistoryOpen] = useState(false);
-  const [notice, setNotice] = useState(() => {
-    const text = nextNotice;
+  const toasts = useKumoToastManager();
+
+  useEffect(() => {
+    if (!nextNotice) return;
+    // The fixed id shows the notice one time, also when React runs this effect two times.
+    toasts.add({ id: "editor-notice", title: nextNotice, variant: "info" });
     nextNotice = null;
-    return text;
-  });
+  }, [toasts]);
 
   useHandleLibrary({ excalidrawAPI: api, adapter: libraryAdapter });
 
@@ -275,7 +288,13 @@ export default function Editor({ projectId, branch }: { projectId: string; branc
     return () => removeEventListener("keydown", onKey, { capture: true });
   }, [dialog, nameCurrentVersion]);
 
-  if (!initialData || !sync) return <p className="page-note">Loading</p>;
+  if (!initialData || !sync) {
+    return (
+      <div className="grid min-h-screen place-items-center text-kumo-subtle" aria-label="Loading">
+        <Loader size={24} />
+      </div>
+    );
+  }
 
   const role = syncState?.role ?? null;
   const headVersionId = syncState?.headVersionId ?? null;
@@ -311,7 +330,11 @@ export default function Editor({ projectId, branch }: { projectId: string; branc
       try {
         setPreview({ version, json: await getVersionScene(projectId, version.id) });
       } catch (reason) {
-        alert(reason instanceof Error ? reason.message : String(reason));
+        toasts.add({
+          title: "The version could not be shown",
+          description: reason instanceof Error ? reason.message : String(reason),
+          variant: "error",
+        });
       }
     },
     name: (version) =>
@@ -386,8 +409,6 @@ export default function Editor({ projectId, branch }: { projectId: string; branc
             onTakeOver={() => sync.takeOver()}
             // The sidebar has its own close button, and the bar has less room beside it.
             onHistory={historyOpen ? null : () => api?.toggleSidebar({ name: HISTORY_SIDEBAR })}
-            notice={notice}
-            onCloseNotice={() => setNotice(null)}
           />
         )}
       >
@@ -458,59 +479,74 @@ function StatusBar({
   projectName,
   onTakeOver,
   onHistory,
-  notice,
-  onCloseNotice,
 }: {
   state: SyncState | null;
   projectName: string | undefined;
   onTakeOver: () => void;
   onHistory: (() => void) | null;
-  notice: string | null;
-  onCloseNotice: () => void;
 }) {
-  let text: string;
-  if (!state || state.role === null) text = "Connecting";
-  else if (state.status === "offline") text = "Offline, saved in this browser";
-  else if (state.role === "viewer") text = `Read-only. ${state.editor ?? "Nobody"} edits.`;
-  else text = state.status === "saving" ? "Saving" : "Saved";
+  let status: { icon: ReactNode; text: string };
+  if (!state || state.role === null) {
+    status = { icon: <Loader size={14} />, text: "Connecting" };
+  } else if (state.status === "offline") {
+    status = { icon: <CloudSlashIcon size={16} />, text: "Offline, saved in this browser" };
+  } else if (state.role === "viewer") {
+    status = { icon: <EyeIcon size={16} />, text: `Read-only. ${state.editor ?? "Nobody"} edits.` };
+  } else if (state.status === "saving") {
+    status = { icon: <Loader size={14} />, text: "Saving" };
+  } else {
+    status = { icon: <CloudCheckIcon size={16} />, text: "Saved" };
+  }
   return (
-    <div className="status-bar">
-      <a
-        href="/"
-        onClick={(event) => {
-          event.preventDefault();
-          navigate("/");
-        }}
-      >
-        Projects
-      </a>
-      {projectName && <span className="status-bar__name">{projectName}</span>}
-      {state && (
-        <span className="status-bar__branch" title="Branch">
-          ⑂ {state.branch}
-        </span>
+    // Excalidraw keeps the browser defaults; kumo-scope gives this bar the Kumo styles.
+    <div className="status-bar kumo-scope flex items-center gap-2 whitespace-nowrap text-sm">
+      <Tooltip
+        content="All projects"
+        render={
+          <Button
+            variant="ghost"
+            size="sm"
+            shape="square"
+            icon={ArrowLeftIcon}
+            aria-label="All projects"
+            onClick={() => navigate("/")}
+          />
+        }
+      />
+      {projectName && (
+        <span className="max-w-56 truncate font-medium text-kumo-strong">{projectName}</span>
       )}
-      <span role="status" data-head={state?.head ?? ""} data-role={state?.role ?? ""}>
-        {text}
+      {state && (
+        <Badge variant="secondary" icon={<GitBranchIcon />} className="max-w-40">
+          <span className="truncate" title="Branch">
+            {state.branch}
+          </span>
+        </Badge>
+      )}
+      <span
+        role="status"
+        className="flex items-center gap-1.5 text-kumo-subtle"
+        data-head={state?.head ?? ""}
+        data-role={state?.role ?? ""}
+      >
+        {status.icon}
+        {status.text}
       </span>
-      {state?.error && <span role="alert">{state.error}</span>}
-      {notice && (
-        <span role="alert">
-          {notice}{" "}
-          <button type="button" className="link" onClick={onCloseNotice}>
-            OK
-          </button>
+      {state?.error && (
+        <span role="alert" className="flex items-center gap-1 text-kumo-danger">
+          <WarningCircleIcon size={16} weight="fill" />
+          {state.error}
         </span>
       )}
       {state?.role === "viewer" && state.status !== "offline" && (
-        <button type="button" onClick={onTakeOver}>
+        <Button size="sm" variant="primary" onClick={onTakeOver}>
           Take over
-        </button>
+        </Button>
       )}
       {onHistory && (
-        <button type="button" onClick={onHistory}>
+        <Button size="sm" icon={ClockCounterClockwiseIcon} onClick={onHistory}>
           History
-        </button>
+        </Button>
       )}
     </div>
   );
