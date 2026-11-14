@@ -10,9 +10,11 @@
     "deploy": "vp build && wrangler deploy"
   },
   "dependencies": {
+    "@cloudflare/kumo": "catalog:",
     "@draw/server": "workspace:*",
     "@draw/shared": "workspace:*",
     "@excalidraw/excalidraw": "catalog:",
+    "@phosphor-icons/react": "catalog:",
     "idb-keyval": "catalog:",
     "react": "^19.3.1",
     "react-dom": "^19.3.1"
@@ -20,10 +22,12 @@
   "devDependencies": {
     "@cloudflare/vite-plugin": "1.69.1",
     "@cloudflare/workers-types": "^5.20261114.1",
+    "@tailwindcss/vite": "catalog:",
     "@types/node": "catalog:",
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",
     "@vitejs/plugin-react": "^6.3.0",
+    "tailwindcss": "catalog:",
     "typescript": "catalog:",
     "vite": "catalog:",
     "vite-plus": "catalog:",

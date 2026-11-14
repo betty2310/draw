@@ -1,20 +1,48 @@
+/* Kumo components are styled with Tailwind. Kumo must come before Tailwind for its tokens. */
+@source "../node_modules/@cloudflare/kumo/dist/**/*.{js,jsx,ts,tsx}";
+@import "@cloudflare/kumo/styles";
+@import "tailwindcss";
+
 @font-face {
   font-family: "Geist";
   src: url("/fonts/Geist-Regular.woff2") format("woff2");
   font-display: swap;
 }
 
-:root {
-  font-family: "Geist", system-ui, sans-serif;
-  color: #1e1e1e;
-  background: #fafafa;
+@theme {
+  --font-sans: "Geist", ui-sans-serif, system-ui, sans-serif;
 }
 
-body {
-  margin: 0;
+@layer base {
+  body {
+    background: var(--color-kumo-canvas);
+    color: var(--text-color-kumo-default);
+  }
+
+  /*
+   * Excalidraw expects the browser defaults, not the Tailwind reset. Its own rules are not in
+   * a layer, so they still apply. Kumo parts in the Excalidraw tree have the kumo-scope class.
+   */
+  .excalidraw {
+    line-height: normal;
+  }
+
+  .excalidraw :not(.kumo-scope, .kumo-scope *),
+  .excalidraw :not(.kumo-scope, .kumo-scope *)::before,
+  .excalidraw :not(.kumo-scope, .kumo-scope *)::after {
+    all: revert-layer;
+  }
+
+  .kumo-scope {
+    line-height: 1.5;
+  }
 }
 
-button {
+/*
+ * Plain buttons of the parts that do not use Kumo yet. These rules are not in a layer,
+ * so they must not match Kumo buttons, which have the data-kumo-component attribute.
+ */
+:is(.page, .status-bar, .history, .preview__bar) button:not([data-kumo-component]) {
   font: inherit;
   padding: 0.35rem 0.8rem;
   border: 1px solid #ccc;
@@ -23,13 +51,13 @@ button {
   cursor: pointer;
 }
 
-button.primary {
+:is(.page, .status-bar, .history, .preview__bar) button.primary {
   background: #6965db;
   border-color: #6965db;
   color: #fff;
 }
 
-button.link {
+:is(.page, .status-bar, .history, .preview__bar) button.link {
   border: 0;
   background: none;
   padding: 0;
@@ -37,7 +65,7 @@ button.link {
   text-decoration: underline;
 }
 
-button[aria-pressed="true"] {
+:is(.page, .history) button[aria-pressed="true"] {
   background: #ecebff;
   border-color: #6965db;
 }
@@ -186,7 +214,7 @@ button.danger.primary {
   color: #fff;
 }
 
-button:disabled {
+:is(.page, .status-bar, .history, .preview__bar) button:disabled:not([data-kumo-component]) {
   cursor: default;
   opacity: 0.5;
 }
@@ -351,41 +379,4 @@ button:disabled {
 .preview__canvas {
   position: relative;
   flex: 1;
-}
-
-.text-dialog {
-  border: 1px solid #ccc;
-  border-radius: 8px;
-  padding: 1.25rem;
-  width: min(26rem, 90vw);
-  font-size: 0.9rem;
-}
-
-.text-dialog h2 {
-  margin: 0 0 0.5rem;
-  font-size: 1.1rem;
-}
-
-.text-dialog p {
-  color: #555;
-}
-
-.text-dialog label {
-  display: flex;
-  flex-direction: column;
-  gap: 0.3rem;
-  font-weight: 600;
-}
-
-.text-dialog input {
-  font: inherit;
-  font-weight: 400;
-  padding: 0.4rem 0.6rem;
-}
-
-.text-dialog__buttons {
-  display: flex;
-  justify-content: flex-end;
-  gap: 0.5rem;
-  margin-top: 1rem;
 }

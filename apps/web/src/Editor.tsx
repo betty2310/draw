@@ -35,17 +35,11 @@ import {
   updateProject,
 } from "./api.ts";
 import { setupFonts } from "./fonts.ts";
-import {
-  HistoryPanel,
-  TextDialog,
-  VersionPreview,
-  versionLabel,
-  type HistoryActions,
-  type TextDialogProps,
-} from "./History.tsx";
+import { HistoryPanel, VersionPreview, versionLabel, type HistoryActions } from "./History.tsx";
 import { blobToDataURL, loadImageFile } from "./images.ts";
 import { libraryAdapter } from "./libraries.ts";
 import { ProjectSync, type ImageFile, type SyncState } from "./sync.ts";
+import { TextDialog, type TextDialogProps } from "./TextDialog.tsx";
 
 const HISTORY_SIDEBAR = "history";
 
