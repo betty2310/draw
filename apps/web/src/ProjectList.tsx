@@ -5,7 +5,6 @@ import {
   FolderOpenIcon,
   PencilSimpleLineIcon,
   PlusIcon,
-  ScribbleLoopIcon,
   TrashIcon,
   UserIcon,
   WarningCircleIcon,
@@ -13,7 +12,7 @@ import {
 import type { Project } from "@draw/shared";
 import { useEffect, useState } from "react";
 import { createProject, listProjects, navigate, updateProject } from "./api.ts";
-import { Avatar, Brand, ProfileDialog, type Profile } from "./Profile.tsx";
+import { Avatar, Brand, Mascot, ProfileDialog, type Profile } from "./Profile.tsx";
 import { TextDialog, type TextDialogProps } from "./TextDialog.tsx";
 
 const relativeTime = new Intl.RelativeTimeFormat(undefined, { numeric: "auto" });
@@ -259,7 +258,7 @@ function ProjectCard({
             className="absolute inset-0 size-full object-contain p-4 transition-transform duration-200 group-hover:scale-[1.03]"
           />
         ) : (
-          <ScribbleLoopIcon size={40} className="text-kumo-inactive" />
+          <Mascot className="h-14 w-auto opacity-25 grayscale" />
         )}
       </a>
       <div className="flex items-center gap-2 px-4 py-3">

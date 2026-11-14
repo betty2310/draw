@@ -4,7 +4,6 @@ import {
   ClockCounterClockwiseIcon,
   CloudCheckIcon,
   GitBranchIcon,
-  ScribbleLoopIcon,
   type Icon,
 } from "@phosphor-icons/react";
 import { useState, type ReactNode } from "react";
@@ -25,14 +24,24 @@ export function saveProfile(profile: Profile) {
 
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
+/** The mascot from the app icon: the cat with a pencil in its mouth. */
+export function Mascot({ className }: { className?: string }) {
+  return <img src="/mascot.webp" alt="" draggable={false} className={className} />;
+}
+
 /** The logo and the app name. */
-export function Brand() {
+export function Brand({ large = false }: { large?: boolean }) {
   return (
-    <span className="flex items-center gap-2.5">
-      <span className="grid size-9 place-items-center rounded-lg bg-kumo-contrast text-kumo-inverse">
-        <ScribbleLoopIcon size={22} weight="bold" />
+    <span className="flex items-end gap-2">
+      <Mascot className={large ? "h-16 w-auto" : "h-10 w-auto"} />
+      <span
+        className={
+          (large ? "pb-1.5 text-2xl" : "pb-1 text-xl") +
+          " font-semibold tracking-tight text-kumo-strong"
+        }
+      >
+        draw
       </span>
-      <span className="text-xl font-semibold tracking-tight text-kumo-strong">draw</span>
     </span>
   );
 }
@@ -163,7 +172,7 @@ export function WelcomePage({ onDone }: { onDone: (profile: Profile) => void }) 
     <main className="welcome min-h-screen">
       <div className="mx-auto grid min-h-screen max-w-5xl items-center gap-12 px-6 py-12 lg:grid-cols-[1fr_26rem] lg:gap-16">
         <section className="flex flex-col gap-10">
-          <Brand />
+          <Brand large />
           <div className="flex flex-col gap-4">
             <h1 className="text-4xl font-semibold tracking-tight text-balance text-kumo-strong sm:text-5xl">
               Diagrams that keep their history.
