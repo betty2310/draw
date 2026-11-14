@@ -1,11 +1,15 @@
-import { Hono } from "hono";
+import { Hono, type Context } from "hono";
 import {
+  MAIN_BRANCH,
   MAX_IMAGE_BYTES,
+  type BranchInfo,
+  type CreateBranchRequest,
   type HealthResponse,
   type Project,
   type ProjectPatch,
+  type VersionInfo,
 } from "@draw/shared";
-import { ProjectRepo } from "./project-repo.ts";
+import { ProjectRepo, type Failure } from "./project-repo.ts";
 
 export { ProjectRepo };
 
@@ -158,6 +162,52 @@ export const app = new Hono<{ Bindings: Env }>()
       // The file id is the hash of the content, so an image never changes.
       "Cache-Control": "public, max-age=31536000, immutable",
     });
+  })
+  .get("/api/projects/:id/versions", async (c) => {
+    const versions = await repo(c.env, c.req.param("id")).listVersions(
+      c.req.query("branch") ?? MAIN_BRANCH,
+      c.req.query("named") === "1",
+      Number(c.req.query("limit") ?? 100),
+    );
+    return c.json<VersionInfo[]>(versions);
+  })
+  .get("/api/projects/:id/versions/:versionId/scene", async (c) => {
+    const scene = await repo(c.env, c.req.param("id")).getVersionScene(
+      Number(c.req.param("versionId")),
+    );
+    if (!scene) return c.json({ error: "Not found" }, 404);
+    return c.body(scene, 200, { "Content-Type": "application/octet-stream" });
+  })
+  .patch("/api/projects/:id/versions/:versionId", async (c) => {
+    const { name } = await c.req.json<{ name?: unknown }>();
+    if (typeof name !== "string") return c.json({ error: "The name must be text" }, 400);
+    const result = await repo(c.env, c.req.param("id")).nameVersion(
+      Number(c.req.param("versionId")),
+      name,
+    );
+    return "error" in result ? fail(c, result) : c.json<VersionInfo>(result);
+  })
+  .get("/api/projects/:id/branches", async (c) =>
+    c.json<BranchInfo[]>(await repo(c.env, c.req.param("id")).listBranches()),
+  )
+  .post("/api/projects/:id/branches", async (c) => {
+    const body = await c.req.json<CreateBranchRequest>();
+    const result = await repo(c.env, c.req.param("id")).createBranch(body);
+    return "error" in result ? fail(c, result) : c.json<BranchInfo>(result, 201);
+  })
+  .patch("/api/projects/:id/branches/:name", async (c) => {
+    const { name } = await c.req.json<{ name?: unknown }>();
+    if (typeof name !== "string") return c.json({ error: "The name must be text" }, 400);
+    const result = await repo(c.env, c.req.param("id")).renameBranch(c.req.param("name"), name);
+    return "error" in result ? fail(c, result) : c.json<BranchInfo>(result);
+  })
+  .delete("/api/projects/:id/branches/:name", async (c) => {
+    const failure = await repo(c.env, c.req.param("id")).deleteBranch(c.req.param("name"));
+    return failure ? fail(c, failure) : c.body(null, 204);
   });
+
+const repo = (env: Env, projectId: string) => env.PROJECT_REPO.getByName(projectId);
+
+const fail = (c: Context, failure: Failure) => c.json({ error: failure.error }, failure.status);
 
 export default { fetch: app.fetch } satisfies ExportedHandler<Env>;

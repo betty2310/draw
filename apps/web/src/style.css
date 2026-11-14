@@ -175,3 +175,217 @@ button[aria-pressed="true"] {
 .project__actions button {
   white-space: nowrap;
 }
+
+button.danger {
+  color: #b00020;
+}
+
+button.danger.primary {
+  background: #b00020;
+  border-color: #b00020;
+  color: #fff;
+}
+
+button:disabled {
+  cursor: default;
+  opacity: 0.5;
+}
+
+.status-bar__branch {
+  padding: 0.1rem 0.5rem;
+  border-radius: 999px;
+  background: #ecebff;
+  color: #3d3a9e;
+  max-width: 10rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* History sidebar */
+
+.history {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  padding: 0 0.75rem 0.75rem;
+  font-size: 0.85rem;
+  overflow-y: auto;
+  min-height: 0;
+}
+
+.history__branch {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.history__branch label {
+  font-weight: 600;
+}
+
+.history__branch select {
+  font: inherit;
+  flex: 1 1 10rem;
+  min-width: 0;
+  padding: 0.3rem;
+}
+
+.history__branch button {
+  padding: 0.25rem 0.5rem;
+}
+
+.history__note {
+  margin: 0;
+  color: #666;
+}
+
+.history__filter {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.history__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.version {
+  border: 1px solid #e3e3e3;
+  border-radius: 6px;
+  background: #fff;
+}
+
+.version[aria-current="true"] {
+  border-color: #6965db;
+  box-shadow: 0 0 0 1px #6965db;
+}
+
+.version__main {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.3rem;
+  width: 100%;
+  border: 0;
+  background: none;
+  text-align: left;
+  padding: 0.45rem 0.6rem 0.2rem;
+}
+
+.version__name {
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.version__name--none {
+  font-weight: 400;
+  color: #777;
+}
+
+.version__meta {
+  flex-basis: 100%;
+  color: #666;
+}
+
+.version__actions {
+  display: flex;
+  gap: 0.3rem;
+  padding: 0.2rem 0.6rem 0.5rem;
+}
+
+.version__actions button {
+  padding: 0.15rem 0.5rem;
+  font-size: 0.8rem;
+}
+
+.tag {
+  font-size: 0.75rem;
+  padding: 0 0.4rem;
+  border-radius: 999px;
+  background: #e6f4ea;
+  color: #1e6b34;
+}
+
+.tag--branch {
+  background: #ecebff;
+  color: #3d3a9e;
+}
+
+/* Version preview over the canvas */
+
+.preview {
+  position: absolute;
+  inset: 0;
+  z-index: 10;
+  display: flex;
+  flex-direction: column;
+  background: #fff;
+}
+
+/* The docked sidebar of Excalidraw is 302 px wide (RIGHT_SIDEBAR_WIDTH) and covers the edge. */
+.preview--beside-sidebar {
+  right: 290px;
+}
+
+.preview__bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.5rem 1rem;
+  background: #fff7d6;
+  border-bottom: 1px solid #e8d48a;
+  font-size: 0.9rem;
+}
+
+.preview__bar span {
+  margin-right: auto;
+}
+
+.preview__canvas {
+  position: relative;
+  flex: 1;
+}
+
+.text-dialog {
+  border: 1px solid #ccc;
+  border-radius: 8px;
+  padding: 1.25rem;
+  width: min(26rem, 90vw);
+  font-size: 0.9rem;
+}
+
+.text-dialog h2 {
+  margin: 0 0 0.5rem;
+  font-size: 1.1rem;
+}
+
+.text-dialog p {
+  color: #555;
+}
+
+.text-dialog label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  font-weight: 600;
+}
+
+.text-dialog input {
+  font: inherit;
+  font-weight: 400;
+  padding: 0.4rem 0.6rem;
+}
+
+.text-dialog__buttons {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.5rem;
+  margin-top: 1rem;
+}

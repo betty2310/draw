@@ -1,10 +1,9 @@
-import { createStore, get, set } from "idb-keyval";
+import { createStore, del, get, set } from "idb-keyval";
 import {
   decodeFrame,
   encodeFrame,
   gunzip,
   gzip,
-  MAIN_BRANCH,
   PING,
   PONG,
   projectImagePath,
@@ -38,6 +37,8 @@ export interface ImageFile {
 export type SaveStatus = "saved" | "saving" | "offline";
 
 export interface SyncState {
+  /** The branch that this page shows. It changes when somebody renames it. */
+  branch: string;
   /** Null until the server tells the role. */
   role: Role | null;
   /** The name of the person who edits the branch. */
@@ -45,6 +46,8 @@ export interface SyncState {
   status: SaveStatus;
   /** Hash of the newest server version that this browser has. */
   head: string | null;
+  /** Id of that version. */
+  headVersionId: number | null;
   error: string | null;
 }
 
@@ -57,10 +60,14 @@ export interface SyncHost {
   applyRemote(json: string, merge: boolean): void;
   onState(state: SyncState): void;
   onSaved(): void;
+  /** The version list or the branch list can be different now. */
+  onHistory(): void;
+  /** The branch was deleted. The page opens `main`. */
+  onBranchGone(): void;
 }
 
 const store = createStore("draw", "local");
-const localKey = (projectId: string) => `scene:${projectId}:${MAIN_BRANCH}`;
+const localKey = (projectId: string, branch: string) => `scene:${projectId}:${branch}`;
 const fileKey = (projectId: string, fileId: string) => `file:${projectId}:${fileId}`;
 
 export function loadLocalImage(projectId: string, fileId: string) {
@@ -74,12 +81,13 @@ export function loadLocalImage(projectId: string, fileId: string) {
  */
 export class ProjectSync {
   readonly #projectId: string;
+  #branch: string;
   readonly #author: string;
   readonly #host: SyncHost;
   /** Random id of this page. A connection again from the same page keeps its edit lock. */
   readonly #client = crypto.randomUUID();
 
-  #state: SyncState = { role: null, editor: null, status: "offline", head: null, error: null };
+  #state: SyncState;
   #baseHash: string | null = null;
   #dirty = false;
   /** Counts local changes, so a save reply tells if a change came during the save. */
@@ -101,16 +109,30 @@ export class ProjectSync {
   #writeAgain = false;
   #serverImages = new Set<string>();
   #localImages = new Set<string>();
+  /** Called when the server has each local change. */
+  #flushWaiters: Array<() => void> = [];
+  /** A restore that waits for the save of the local changes. */
+  #pendingRestore: number | null = null;
 
-  constructor(projectId: string, author: string, host: SyncHost) {
+  constructor(projectId: string, branch: string, author: string, host: SyncHost) {
     this.#projectId = projectId;
+    this.#branch = branch;
     this.#author = author;
     this.#host = host;
+    this.#state = {
+      branch,
+      role: null,
+      editor: null,
+      status: "offline",
+      head: null,
+      headVersionId: null,
+      error: null,
+    };
   }
 
   /** Loads the copy of this browser, which the editor shows before the server answers. */
   async load(): Promise<string | null> {
-    const local = await get<LocalCopy>(localKey(this.#projectId), store);
+    const local = await get<LocalCopy>(localKey(this.#projectId, this.#branch), store);
     if (!local) return null;
     this.#baseHash = local.baseHash;
     this.#dirty = local.dirty;
@@ -154,6 +176,32 @@ export class ProjectSync {
     this.#socket?.send(JSON.stringify({ type: "takeover" }));
   }
 
+  /** Resolves when the server has each local change, so a name or a branch includes them. */
+  flush(): Promise<void> {
+    if (!this.#dirty || this.#state.role !== "editor") return Promise.resolve();
+    clearTimeout(this.#saveTimer);
+    void this.#saveToServer();
+    return new Promise((resolve) => this.#flushWaiters.push(resolve));
+  }
+
+  /**
+   * Adds a new version with a copy of the scene of `versionId`. The local changes are saved
+   * first, so they stay in the history.
+   */
+  restore(versionId: number) {
+    if (this.#state.role !== "editor") return;
+    this.#pendingRestore = versionId;
+    if (this.#dirty) return void this.flush();
+    this.#sendRestore();
+  }
+
+  #sendRestore() {
+    const versionId = this.#pendingRestore;
+    if (versionId === null || this.#socket?.readyState !== WebSocket.OPEN) return;
+    this.#pendingRestore = null;
+    this.#socket.send(JSON.stringify({ type: "restore", versionId, baseHash: this.#baseHash }));
+  }
+
   get state() {
     return this.#state;
   }
@@ -181,7 +229,7 @@ export class ProjectSync {
           baseHash: this.#baseHash,
           dirty: this.#dirty,
         };
-        await set(localKey(this.#projectId), copy, store);
+        await set(localKey(this.#projectId, this.#branch), copy, store);
       } while (this.#writeAgain);
     })().finally(() => (this.#writing = null));
     return this.#writing;
@@ -245,7 +293,7 @@ export class ProjectSync {
     if (this.#closed) return;
     const url = new URL(
       projectSocketPath(this.#projectId, {
-        branch: MAIN_BRANCH,
+        branch: this.#branch,
         author: this.#author,
         client: this.#client,
         known: this.#baseHash ?? "",
@@ -292,7 +340,13 @@ export class ProjectSync {
       case "hello": {
         this.#serverImages = new Set(message.imageIds);
         const head = message.head?.hash ?? null;
-        this.#update({ role: message.role, editor: message.editor, head, error: null });
+        this.#update({
+          role: message.role,
+          editor: message.editor,
+          head,
+          headVersionId: message.head?.versionId ?? null,
+          error: null,
+        });
         // A scene frame follows when the server has a different scene.
         if (head === this.#baseHash && this.#dirty) void this.#saveToServer();
         break;
@@ -315,19 +369,50 @@ export class ProjectSync {
         this.#saving = false;
         this.#update({ error: message.message });
         break;
+      case "history":
+        this.#host.onHistory();
+        break;
+      case "branches":
+        if (message.deleted === this.#branch) void this.#branchGone();
+        else if (message.renamed?.from === this.#branch)
+          void this.#branchRenamed(message.renamed.to);
+        this.#host.onHistory();
+        break;
     }
+  }
+
+  /** The server moved this socket to the new name. The local copy moves too. */
+  async #branchRenamed(to: string) {
+    const from = this.#branch;
+    this.#branch = to;
+    this.#update({ branch: to });
+    await this.#writing;
+    const local = await get<LocalCopy>(localKey(this.#projectId, from), store);
+    if (local) await set(localKey(this.#projectId, to), local, store);
+    await del(localKey(this.#projectId, from), store);
+  }
+
+  async #branchGone() {
+    this.stop();
+    await this.#writing;
+    await del(localKey(this.#projectId, this.#branch), store);
+    this.#host.onBranchGone();
   }
 
   #onSaved(head: Head) {
     this.#saving = false;
     this.#baseHash = head.hash;
     if (this.#changes === this.#savedChanges) this.#dirty = false;
-    this.#update({ head: head.hash, error: null });
+    this.#update({ head: head.hash, headVersionId: head.versionId, error: null });
     void this.#writeLocal();
     this.#host.onSaved();
-    if (this.#saveAgain) {
+    this.#host.onHistory();
+    if (this.#saveAgain || (this.#dirty && this.#flushWaiters.length > 0)) {
       this.#saveAgain = false;
       void this.#saveToServer();
+    } else if (!this.#dirty) {
+      for (const resolve of this.#flushWaiters.splice(0)) resolve();
+      this.#sendRestore();
     }
   }
 
@@ -336,7 +421,7 @@ export class ProjectSync {
    * When it edits again, it merges them into the scene.
    */
   async #restoreLocalChanges() {
-    const local = await get<LocalCopy>(localKey(this.#projectId), store);
+    const local = await get<LocalCopy>(localKey(this.#projectId, this.#branch), store);
     if (local?.dirty) this.#host.applyRemote(local.json, true);
     this.changed();
   }
@@ -346,7 +431,14 @@ export class ProjectSync {
     if (header.type !== "scene") return;
     const json = await gunzip(body.slice());
     this.#baseHash = header.head.hash;
-    this.#update({ head: header.head.hash });
+    this.#update({ head: header.head.hash, headVersionId: header.head.versionId });
+    this.#host.onHistory();
+    if (header.restored && this.#state.role === "editor") {
+      // The editor asked for the restore after its changes were saved. The old scene replaces them.
+      this.#dirty = false;
+      this.#changes = this.#savedChanges;
+      this.#update({});
+    }
     if (this.#state.role === "editor" && this.#dirty) {
       // The server has a scene that this browser did not see. Keep both.
       this.#host.applyRemote(json, true);

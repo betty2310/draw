@@ -8,6 +8,7 @@ import {
   reconcileElements,
   restoreElements,
   serializeAsJSON,
+  Sidebar,
   useHandleLibrary,
 } from "@excalidraw/excalidraw";
 import "@excalidraw/excalidraw/index.css";
@@ -19,12 +20,45 @@ import type {
   ExcalidrawImperativeAPI,
   ExcalidrawInitialDataState,
 } from "@excalidraw/excalidraw/types";
-import { projectImagePath, type Project } from "@draw/shared";
-import { useEffect, useRef, useState } from "react";
-import { getAuthor, getProject, navigate, updateProject } from "./api.ts";
+import { MAIN_BRANCH, type Project, type VersionInfo } from "@draw/shared";
+import { useCallback, useEffect, useRef, useState } from "react";
+import {
+  createBranch,
+  deleteBranch,
+  editorPath,
+  getAuthor,
+  getProject,
+  getVersionScene,
+  navigate,
+  nameVersion,
+  renameBranch,
+  updateProject,
+} from "./api.ts";
 import { setupFonts } from "./fonts.ts";
+import {
+  HistoryPanel,
+  TextDialog,
+  VersionPreview,
+  versionLabel,
+  type HistoryActions,
+  type TextDialogProps,
+} from "./History.tsx";
+import { blobToDataURL, loadImageFile } from "./images.ts";
 import { libraryAdapter } from "./libraries.ts";
-import { loadLocalImage, ProjectSync, type ImageFile, type SyncState } from "./sync.ts";
+import { ProjectSync, type ImageFile, type SyncState } from "./sync.ts";
+
+const HISTORY_SIDEBAR = "history";
+
+/** A switch of branch opens a new editor. The History sidebar stays open after it. */
+let reopenHistory = false;
+/** A message for the next editor, for example that its branch was deleted. */
+let nextNotice: string | null = null;
+/** The branch that this page deletes. Its own delete needs no notice. */
+let deletingBranch: string | null = null;
+const openBranch = (projectId: string, branch: string) => {
+  reopenHistory = true;
+  navigate(editorPath(projectId, branch));
+};
 
 /** The project list shows a thumbnail. It is made at most this often while you draw. */
 const THUMB_EVERY_MS = 10_000;
@@ -48,15 +82,7 @@ const serialize = (api: ExcalidrawImperativeAPI) =>
 const imageFiles = (api: ExcalidrawImperativeAPI): ImageFile[] =>
   Object.values(api.getFiles()).map(({ id, mimeType, dataURL }) => ({ id, mimeType, dataURL }));
 
-const blobToDataURL = (blob: Blob) =>
-  new Promise<string>((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(reader.result as string);
-    reader.onerror = () => reject(reader.error);
-    reader.readAsDataURL(blob);
-  });
-
-export default function Editor({ projectId }: { projectId: string }) {
+export default function Editor({ projectId, branch }: { projectId: string; branch: string }) {
   const [project, setProject] = useState<Project | null>(null);
   const [initialData, setInitialData] = useState<ExcalidrawInitialDataState | null>(null);
   const [sync, setSync] = useState<ProjectSync | null>(null);
@@ -65,6 +91,16 @@ export default function Editor({ projectId }: { projectId: string }) {
   const apiRef = useRef<ExcalidrawImperativeAPI | null>(null);
   const lastKey = useRef("");
   const loadImages = useRef((_elements: readonly ExcalidrawElement[]) => {});
+  const [historyTick, setHistoryTick] = useState(0);
+  const [preview, setPreview] = useState<{ version: VersionInfo; json: string } | null>(null);
+  const [dialog, setDialog] = useState<TextDialogProps | null>(null);
+  const [sidebarDocked, setSidebarDocked] = useState(true);
+  const [historyOpen, setHistoryOpen] = useState(false);
+  const [notice, setNotice] = useState(() => {
+    const text = nextNotice;
+    nextNotice = null;
+    return text;
+  });
 
   useHandleLibrary({ excalidrawAPI: api, adapter: libraryAdapter });
 
@@ -110,17 +146,7 @@ export default function Editor({ projectId }: { projectId: string }) {
         if (have[id] || loadingImages.has(id)) continue;
         loadingImages.add(id);
         void (async () => {
-          let file = await loadLocalImage(projectId, id);
-          // The editor uploads an image just before the save that uses it.
-          for (let attempt = 0; !file && attempt < 5; attempt++) {
-            const response = await fetch(projectImagePath(projectId, id)).catch(() => null);
-            if (response?.ok) {
-              const blob = await response.blob();
-              file = { id, mimeType: blob.type, dataURL: await blobToDataURL(blob) };
-            } else {
-              await new Promise((resolve) => setTimeout(resolve, 2000));
-            }
-          }
+          const file = await loadImageFile(projectId, id, 5);
           loadingImages.delete(id);
           if (file && !apiRef.current?.isDestroyed) {
             apiRef.current!.addFiles([
@@ -136,7 +162,7 @@ export default function Editor({ projectId }: { projectId: string }) {
       }
     };
 
-    const sync = new ProjectSync(projectId, getAuthor(), {
+    const sync = new ProjectSync(projectId, branch, getAuthor(), {
       serialize: () => serialize(apiRef.current!),
       files: () => imageFiles(apiRef.current!),
       applyRemote(json, merge) {
@@ -173,8 +199,18 @@ export default function Editor({ projectId }: { projectId: string }) {
       },
       onState: setSyncState,
       onSaved() {
+        // The project list shows the drawing of main.
+        if (sync.state.branch !== MAIN_BRANCH) return;
         thumbDue = true;
         thumbTimer ??= setTimeout(() => void saveThumb(), THUMB_EVERY_MS);
+      },
+      onHistory: () => setHistoryTick((tick) => tick + 1),
+      onBranchGone() {
+        if (deletingBranch !== sync.state.branch) {
+          nextNotice = `The branch "${sync.state.branch}" was deleted. This is the main branch.`;
+        }
+        history.replaceState(null, "", editorPath(projectId, MAIN_BRANCH));
+        dispatchEvent(new PopStateEvent("popstate"));
       },
     });
 
@@ -185,9 +221,14 @@ export default function Editor({ projectId }: { projectId: string }) {
       fitFirstScene = !scene;
       setInitialData({
         elements: scene ? restoreElements(scene.elements, null) : [],
-        appState: { ...scene?.appState, minimapEnabled: true },
+        appState: {
+          ...scene?.appState,
+          minimapEnabled: true,
+          openSidebar: reopenHistory ? { name: HISTORY_SIDEBAR } : null,
+        },
         scrollToContent: true,
       });
+      reopenHistory = false;
       loadImages.current = (elements) => void loadMissingImages(elements);
       // The editor calls `connect` when it shows the local copy (see onInitialize).
       setSync(sync);
@@ -199,11 +240,126 @@ export default function Editor({ projectId }: { projectId: string }) {
       clearTimeout(thumbTimer);
       if (thumbDue) void saveThumb();
     };
-  }, [projectId]);
+  }, [projectId, branch]);
+
+  // A rename of the branch keeps this page and changes the URL.
+  const currentBranch = syncState?.branch ?? branch;
+  useEffect(() => {
+    if (currentBranch !== branch) {
+      history.replaceState(null, "", editorPath(projectId, currentBranch));
+    }
+  }, [projectId, branch, currentBranch]);
+
+  /** Names the current version. The local changes are saved first, so the name includes them. */
+  const nameCurrentVersion = useCallback(() => {
+    if (!sync) return;
+    setDialog({
+      title: "Name this version",
+      label: "Name",
+      note: "A version with a name is kept. Versions with no name are deleted after 30 days.",
+      submit: "Save name",
+      onSubmit: async (name) => {
+        await sync.flush();
+        const id = sync.state.headVersionId;
+        if (id === null) throw new Error("Draw something first. The branch has no version.");
+        await nameVersion(projectId, id, name);
+      },
+    });
+  }, [projectId, sync]);
+
+  // Ctrl+S names the current version. Excalidraw would save a file instead.
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      if (!(event.ctrlKey || event.metaKey) || event.shiftKey || event.key.toLowerCase() !== "s") {
+        return;
+      }
+      event.preventDefault();
+      event.stopPropagation();
+      if (!dialog) nameCurrentVersion();
+    };
+    addEventListener("keydown", onKey, { capture: true });
+    return () => removeEventListener("keydown", onKey, { capture: true });
+  }, [dialog, nameCurrentVersion]);
 
   if (!initialData || !sync) return <p className="page-note">Loading</p>;
 
   const role = syncState?.role ?? null;
+  const headVersionId = syncState?.headVersionId ?? null;
+
+  const restore = (version: VersionInfo) =>
+    setDialog({
+      title: "Restore this version?",
+      note: `A new version on ${currentBranch} gets the drawing of "${versionLabel(version)}". No version is removed.`,
+      submit: "Restore",
+      onSubmit: async () => {
+        sync.restore(version.id);
+        setPreview(null);
+      },
+    });
+
+  const branchFrom = (version: VersionInfo) =>
+    setDialog({
+      title: "Create branch from this version",
+      label: "Branch name",
+      note: `The new branch starts with the drawing of "${versionLabel(version)}".`,
+      submit: "Create branch",
+      onSubmit: async (name) => {
+        // A branch from the current version includes the changes of the last seconds.
+        if (version.id === headVersionId) await sync.flush();
+        const created = await createBranch(projectId, name, version.id);
+        openBranch(projectId, created.name);
+      },
+    });
+
+  const actions: HistoryActions = {
+    async preview(version) {
+      if (preview?.version.id === version.id) return setPreview(null);
+      try {
+        setPreview({ version, json: await getVersionScene(projectId, version.id) });
+      } catch (reason) {
+        alert(reason instanceof Error ? reason.message : String(reason));
+      }
+    },
+    name: (version) =>
+      setDialog({
+        title: version.name ? "Rename this version" : "Name this version",
+        label: "Name",
+        initial: version.name,
+        note: "Leave the name empty to remove it. Versions with no name are deleted after 30 days.",
+        submit: "Save name",
+        allowEmpty: !!version.name,
+        onSubmit: async (name) => void (await nameVersion(projectId, version.id, name)),
+      }),
+    restore,
+    branch: branchFrom,
+    switchBranch: (name) => openBranch(projectId, name),
+    renameBranch: (name) =>
+      setDialog({
+        title: "Rename branch",
+        label: "Branch name",
+        initial: name,
+        submit: "Rename",
+        onSubmit: async (to) => void (await renameBranch(projectId, name, to)),
+      }),
+    deleteBranch: (name) =>
+      setDialog({
+        title: `Delete the branch "${name}"?`,
+        note: "All versions of the branch are deleted, also the versions with a name. Other branches do not change.",
+        submit: "Delete branch",
+        danger: true,
+        onSubmit: async () => {
+          deletingBranch = name;
+          // The notice of the server can open main before this page does.
+          reopenHistory = true;
+          try {
+            await deleteBranch(projectId, name);
+          } finally {
+            deletingBranch = null;
+          }
+          openBranch(projectId, MAIN_BRANCH);
+        },
+      }),
+  };
   return (
     <div className="editor">
       <Excalidraw
@@ -234,11 +390,40 @@ export default function Editor({ projectId }: { projectId: string }) {
             state={syncState}
             projectName={project?.name}
             onTakeOver={() => sync.takeOver()}
+            // The sidebar has its own close button, and the bar has less room beside it.
+            onHistory={historyOpen ? null : () => api?.toggleSidebar({ name: HISTORY_SIDEBAR })}
+            notice={notice}
+            onCloseNotice={() => setNotice(null)}
           />
         )}
       >
+        <Sidebar
+          name={HISTORY_SIDEBAR}
+          docked={sidebarDocked}
+          onDock={setSidebarDocked}
+          onStateChange={(state) => setHistoryOpen(state?.name === HISTORY_SIDEBAR)}
+        >
+          <Sidebar.Header>History</Sidebar.Header>
+          <HistoryPanel
+            projectId={projectId}
+            branch={currentBranch}
+            role={role}
+            headVersionId={headVersionId}
+            previewId={preview?.version.id ?? null}
+            tick={historyTick}
+            actions={actions}
+          />
+        </Sidebar>
         <MainMenu>
           <MainMenu.Item onSelect={() => navigate("/")}>All projects</MainMenu.Item>
+          <MainMenu.Item
+            onSelect={() => api?.toggleSidebar({ name: HISTORY_SIDEBAR, force: true })}
+          >
+            Version history
+          </MainMenu.Item>
+          <MainMenu.Item onSelect={nameCurrentVersion} shortcut="Ctrl+S">
+            Name this version
+          </MainMenu.Item>
           <MainMenu.DefaultItems.LoadScene />
           <MainMenu.DefaultItems.SaveToActiveFile />
           <MainMenu.DefaultItems.Export />
@@ -251,6 +436,20 @@ export default function Editor({ projectId }: { projectId: string }) {
           <MainMenu.DefaultItems.ChangeCanvasBackground />
         </MainMenu>
       </Excalidraw>
+      {preview && (
+        <VersionPreview
+          key={preview.version.id}
+          besideSidebar={historyOpen && sidebarDocked}
+          projectId={projectId}
+          version={preview.version}
+          json={preview.json}
+          canRestore={role === "editor" && preview.version.id !== headVersionId}
+          onRestore={() => restore(preview.version)}
+          onBranch={() => branchFrom(preview.version)}
+          onClose={() => setPreview(null)}
+        />
+      )}
+      {dialog && <TextDialog {...dialog} onClose={() => setDialog(null)} />}
     </div>
   );
 }
@@ -259,10 +458,16 @@ function StatusBar({
   state,
   projectName,
   onTakeOver,
+  onHistory,
+  notice,
+  onCloseNotice,
 }: {
   state: SyncState | null;
   projectName: string | undefined;
   onTakeOver: () => void;
+  onHistory: (() => void) | null;
+  notice: string | null;
+  onCloseNotice: () => void;
 }) {
   let text: string;
   if (!state || state.role === null) text = "Connecting";
@@ -281,13 +486,31 @@ function StatusBar({
         Projects
       </a>
       {projectName && <span className="status-bar__name">{projectName}</span>}
+      {state && (
+        <span className="status-bar__branch" title="Branch">
+          ⑂ {state.branch}
+        </span>
+      )}
       <span role="status" data-head={state?.head ?? ""} data-role={state?.role ?? ""}>
         {text}
       </span>
       {state?.error && <span role="alert">{state.error}</span>}
+      {notice && (
+        <span role="alert">
+          {notice}{" "}
+          <button type="button" className="link" onClick={onCloseNotice}>
+            OK
+          </button>
+        </span>
+      )}
       {state?.role === "viewer" && state.status !== "offline" && (
         <button type="button" onClick={onTakeOver}>
           Take over
+        </button>
+      )}
+      {onHistory && (
+        <button type="button" onClick={onHistory}>
+          History
         </button>
       )}
     </div>

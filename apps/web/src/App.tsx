@@ -1,3 +1,4 @@
+import { MAIN_BRANCH } from "@draw/shared";
 import { lazy, Suspense, useEffect, useState } from "react";
 import { getAuthor, setAuthor } from "./api.ts";
 import { ProjectList } from "./ProjectList.tsx";
@@ -9,10 +10,15 @@ const projectIdFromPath = (path: string) => /^\/p\/([\w-]+)$/.exec(path)?.[1] ??
 
 export function App() {
   const [path, setPath] = useState(location.pathname);
+  // The branch is in the query, so a switch of branch opens a new editor.
+  const [search, setSearch] = useState(location.search);
   const [author, setAuthorState] = useState(getAuthor());
 
   useEffect(() => {
-    const onPopState = () => setPath(location.pathname);
+    const onPopState = () => {
+      setPath(location.pathname);
+      setSearch(location.search);
+    };
     addEventListener("popstate", onPopState);
     return () => removeEventListener("popstate", onPopState);
   }, []);
@@ -30,9 +36,10 @@ export function App() {
 
   const projectId = projectIdFromPath(path);
   if (projectId) {
+    const branch = new URLSearchParams(search).get("branch") || MAIN_BRANCH;
     return (
       <Suspense fallback={<p className="page-note">Loading</p>}>
-        <Editor key={projectId} projectId={projectId} />
+        <Editor key={`${projectId}:${branch}`} projectId={projectId} branch={branch} />
       </Suspense>
     );
   }
