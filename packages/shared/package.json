@@ -1,0 +1,14 @@
+{
+  "name": "@draw/shared",
+  "version": "0.0.0",
+  "private": true,
+  "description": "API types, scene hash and version rules shared by the app and the Worker",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "devDependencies": {
+    "typescript": "catalog:",
+    "vite-plus": "catalog:"
+  }
+}

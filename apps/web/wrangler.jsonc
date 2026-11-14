@@ -1,0 +1,24 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "draw",
+  "main": "./worker/index.ts",
+  "compatibility_date": "2026-11-01",
+  "observability": { "enabled": true },
+  "assets": {
+    "not_found_handling": "single-page-application",
+    // The Worker handles the API. All other paths are static files.
+    "run_worker_first": ["/api/*"],
+  },
+  "durable_objects": {
+    "bindings": [{ "name": "PROJECT_REPO", "class_name": "ProjectRepo" }],
+  },
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["ProjectRepo"] }],
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "draw",
+      // Created in the APAC region, near the users in Vietnam.
+      "database_id": "bf53a9d6-eac4-46db-abba-d8b5a0ba1098",
+    },
+  ],
+}

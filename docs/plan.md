@@ -1,6 +1,6 @@
 # Diagram app plan
 
-Version 1 is an Excalidraw editor with a project list, autosave, a version history with named versions, and branches, on the Cloudflare free plan. The plan has three phases. No code is written yet.
+Version 1 is an Excalidraw editor with a project list, autosave, a version history with named versions, and branches, on the Cloudflare free plan. The plan has three phases. The code of Phase 0 is in the repository.
 
 The repository name and the version rules are in "Decisions".
 
@@ -145,15 +145,50 @@ Size limits apply to version 1. A compressed scene has a maximum of 1.5 MB, and 
 
 ### Phase 0. Project skeleton and measurements
 
-- [ ] Create the monorepo with `vp create vite:monorepo` and the three packages.
-- [ ] Run `vp dev` with the Cloudflare plugin. The page, one API route and one Durable Object with SQLite and WebSocket must work on the local machine.
-- [ ] Make `vp check` and `vp test` pass, with one test of the Durable Object.
-- [ ] Deploy to your Cloudflare account with `wrangler deploy`.
-- [ ] Measure the save time from Vietnam for payloads of 50 KB, 300 KB and 1 MB. Measure the Worker CPU time for the same payloads.
+- [x] Create the monorepo with `vp create vite:monorepo` and the three packages.
+- [x] Run `vp dev` with the Cloudflare plugin. The page, one API route and one Durable Object with SQLite and WebSocket must work on the local machine.
+- [x] Make `vp check` and `vp test` pass, with one test of the Durable Object.
+- [x] Deploy to your Cloudflare account with `wrangler deploy`.
+- [ ] Measure the save time from Vietnam for payloads of 50 KB, 300 KB and 1 MB. Measure the Worker CPU time for the same payloads. The CPU time is measured. The save time from Vietnam is not measured yet.
 
 Phase 0 is done when the deployed page saves a test payload through the WebSocket, and the measured numbers are in this plan.
 
-I need a Cloudflare API token and the account id as Amp secrets before the deploy step.
+#### Phase 0 results
+
+The app is deployed at https://draw.huynhduongsh1.workers.dev. The page has a "Run save test" button. The test creates a new project, saves random bytes of 50 KB, 300 KB and 1 MB through the WebSocket, 10 times for each size, and shows the time from send to the server reply. The server replies with the SHA-256 of the stored bytes, and the page checks it.
+
+Random bytes do not compress, so each size is the size on the network, the same as a gzip scene of that size.
+
+These facts are different from the plan or are new.
+
+- Vite+ with the Cloudflare plugin works. `vp -C apps/web dev` runs the page, the API and the Durable Object, and `vp run deploy` builds and deploys. The fallback in "Risks" is not necessary.
+- Vite+ 1.6.0 includes Vitest 5. `@cloudflare/vitest-pool-workers` needs Vitest 4, so it does not work. The Durable Object test starts the real Worker in workerd with `unstable_startWorker` from Wrangler, and it connects with a WebSocket.
+- The D1 database `draw` is in the APAC region. Without a location hint, Cloudflare put it in western North America, near the computer that created it.
+- Cloudflare creates a Durable Object near the first request to it. The project of a person in Vietnam is thus near Vietnam only if that person opens it first. The save test creates a new project on each run for this reason.
+- The Cloudflare API token can deploy a Worker with a Durable Object and create a D1 database.
+
+CPU time on Cloudflare, from `wrangler tail`, 10 saves for each size. The object ran in LAX, and the client was in the western United States.
+
+| Payload | CPU time of one save | Wall time of one save in the object | Save time from the western United States (median) |
+| --- | --- | --- | --- |
+| 50 KB | 0 to 1 ms | 44 to 45 ms | 106 ms |
+| 300 KB | 1 ms | 49 to 52 ms | 124 ms |
+| 1 MB | 1 to 4 ms, median 2 ms | 55 to 60 ms | 166 ms |
+
+The first save of each size took longer: 337 ms, 87 ms and 91 ms of wall time in the object. The Worker used 3 ms of CPU time for `/api/health` and 3 ms for the WebSocket upgrade.
+
+The results are as follows.
+
+- A save of 1 MB uses at most 4 ms of CPU time. That is below the 10 ms limit of the Workers Free plan, which is the strictest limit that can apply to a Durable Object. The CPU limit is not a risk for saves.
+- Each save waits about 45 to 60 ms in the object, with almost no CPU time. The cause is probably the wait for the confirmation of the SQLite write before the reply. This time does not change with the distance to the browser.
+
+Save time from Vietnam: not measured yet. The owner runs the save test from Vietnam and sends the result.
+
+| Payload | Median | 90th percentile |
+| --- | --- | --- |
+| 50 KB | not measured | not measured |
+| 300 KB | not measured | not measured |
+| 1 MB | not measured | not measured |
 
 ### Phase 1. Editor, projects and autosave
 
@@ -207,15 +242,15 @@ The plan has no UI component library and no router library. The app has two page
 ## Decisions
 
 1. The name is `draw`. The repository is the public GitHub repository `betty2310/draw`. The owner gave this answer.
-2. A new version starts after each 5 minutes of drawing, and versions with no name are deleted after 30 days. This is the default of the plan. The owner did not confirm it, and the owner can change the two numbers.
+2. A new version starts after each 5 minutes of drawing, and versions with no name are deleted after 30 days. This is the default of the plan. The owner did not confirm it, and the owner can change the two numbers. The two numbers are in `packages/shared/src/version-rules.ts`.
 
 ## Risks
 
 - All persons who have the URL can read, change and delete all projects, because there is no login. The trash list makes a delete reversible. Cloudflare Access can be added later with no code change.
 - A version with no name is deleted after 30 days. Give a name to each version that you want to keep.
 - The pinned Excalidraw build is not a release. A later build can change the `Fonts` class or the minimap. The signal is a type error or mixed fonts after an upgrade.
-- I did not test Vite+ with the Cloudflare plugin. The plugin accepts Vite 6, 7 and 8 in its `peerDependencies`. Phase 0 tests the combination. The fallback is `wrangler dev` for the Worker and a Vite proxy for `/api`.
-- I did not measure the 10 ms CPU limit or the network time from Vietnam. Phase 0 measures both.
+- Vite+ with the Cloudflare plugin works in Phase 0 for dev, build and deploy. If a later version breaks it, the fallback is `wrangler dev` for the Worker and a Vite proxy for `/api`.
+- A save of 1 MB uses at most 4 ms of the 10 ms CPU limit. The network time from Vietnam is not measured yet. See "Phase 0 results".
 
 ## Out of scope
 
