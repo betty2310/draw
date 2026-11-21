@@ -85,7 +85,9 @@ The Worker has one variable and one secret, for "Sign in with Google".
 | `GOOGLE_CLIENT_ID` | `vars` in `wrangler.jsonc` | The client ID of the OAuth client `draw web` in the Google Cloud project `draw` |
 | `GOOGLE_CLIENT_SECRET` | `npx wrangler secret put GOOGLE_CLIENT_SECRET` in `apps/web`, or the dashboard: Worker `draw` > Settings > Variables and Secrets, type Secret | The client secret. Google shows it only when you make the client. |
 
-For local dev, put both in `apps/web/.dev.vars`. The Worker builds the redirect URI from the address of the request, so each address needs its own redirect URI in the OAuth client: `https://draw.betty2310.com/api/auth/google/callback`, `https://draw.huynhduongsh1.workers.dev/api/auth/google/callback` and `http://localhost:5173/api/auth/google/callback`. Open the local app on `localhost`, not `127.0.0.1`, or Google refuses the redirect.
+The Worker builds the redirect URI from the address of the request, so each address needs its own redirect URI in the OAuth client. The app is published (In production) with a verified brand, so the client `draw web` in the Google Cloud project `draw` has only `https://draw.betty2310.com/api/auth/google/callback`. Google sign-in does not work on `draw.huynhduongsh1.workers.dev`.
+
+For local dev, make an OAuth client in a separate Google Cloud project (for example `draw-dev`) with the redirect URI `http://localhost:5173/api/auth/google/callback`, and put its `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET` in `apps/web/.dev.vars`. Google's policy keeps `localhost` out of the production client. Open the local app on `localhost`, not `127.0.0.1`, or Google refuses the redirect.
 
 The deploy needs two values in the shell or in CI. They are not stored in the Worker:
 
