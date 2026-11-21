@@ -1,6 +1,6 @@
 # Deploy infrastructure on Cloudflare
 
-The app runs on the Cloudflare Workers Free plan. All resources are in one Cloudflare account. This document is based on `apps/web/wrangler.jsonc`, the package scripts, and the deployed app at https://draw.huynhduongsh1.workers.dev. The code design is in [architecture.md](architecture.md).
+The app runs on the Cloudflare Workers Free plan. All resources are in one Cloudflare account. This document is based on `apps/web/wrangler.jsonc`, the package scripts, and the deployed app at https://draw.betty2310.com. The code design is in [architecture.md](architecture.md).
 
 ## Resources
 
@@ -9,9 +9,10 @@ The app runs on the Cloudflare Workers Free plan. All resources are in one Cloud
 | Worker | `draw` | Worker with static assets | The React app (`dist/client`) and the API (`/api/*`) |
 | Durable Object namespace | `ProjectRepo` | SQLite-backed Durable Object class | One object for each project: versions, branches, images, the WebSockets, the cleanup alarm |
 | D1 database | `draw` (`bf53a9d6-eac4-46db-abba-d8b5a0ba1098`) | D1, region APAC | The `projects` table: the project list |
-| URL | `draw.huynhduongsh1.workers.dev` | `workers.dev` subdomain | The public URL of the Worker |
+| URL | `draw.betty2310.com` | Workers Custom Domain in the zone `betty2310.com` | The public URL of the app. It was added in the dashboard, not in `wrangler.jsonc`. |
+| URL | `draw.huynhduongsh1.workers.dev` | `workers.dev` subdomain | The first URL of the Worker. It still works. |
 
-There is no R2 bucket, KV namespace, queue, cron trigger or custom domain. Images are in the SQLite storage of the Durable Object of their project.
+There is no R2 bucket, KV namespace, queue or cron trigger. Images are in the SQLite storage of the Durable Object of their project.
 
 ```mermaid
 flowchart TB
@@ -30,7 +31,7 @@ flowchart TB
     Obs["Workers Logs<br/>observability enabled"]
   end
 
-  User -- "https://draw.huynhduongsh1.workers.dev" --> Edge
+  User -- "https://draw.betty2310.com" --> Edge
   Worker -- "binding PROJECT_REPO<br/>getByName(projectId)" --> DOs
   Worker -- "binding DB" --> D1
   Worker -.-> Obs
@@ -84,7 +85,7 @@ The Worker has one variable and one secret, for "Sign in with Google".
 | `GOOGLE_CLIENT_ID` | `vars` in `wrangler.jsonc` | The client ID of the OAuth client `draw web` in the Google Cloud project `draw` |
 | `GOOGLE_CLIENT_SECRET` | `npx wrangler secret put GOOGLE_CLIENT_SECRET` in `apps/web`, or the dashboard: Worker `draw` > Settings > Variables and Secrets, type Secret | The client secret. Google shows it only when you make the client. |
 
-For local dev, put both in `apps/web/.dev.vars`. The OAuth client has two redirect URIs: `https://draw.huynhduongsh1.workers.dev/api/auth/google/callback` and `http://localhost:5173/api/auth/google/callback`. Open the local app on `localhost`, not `127.0.0.1`, or Google refuses the redirect.
+For local dev, put both in `apps/web/.dev.vars`. The Worker builds the redirect URI from the address of the request, so each address needs its own redirect URI in the OAuth client: `https://draw.betty2310.com/api/auth/google/callback`, `https://draw.huynhduongsh1.workers.dev/api/auth/google/callback` and `http://localhost:5173/api/auth/google/callback`. Open the local app on `localhost`, not `127.0.0.1`, or Google refuses the redirect.
 
 The deploy needs two values in the shell or in CI. They are not stored in the Worker:
 
@@ -139,7 +140,7 @@ sequenceDiagram
   WR->>CF: upload new and changed static assets
   WR->>CF: upload the Worker script with the bindings
   CF->>CF: apply Durable Object migrations that are new (v1 one time only)
-  CF-->>WR: new Worker version, URL draw.huynhduongsh1.workers.dev
+  CF-->>WR: new Worker version on draw.betty2310.com and draw.huynhduongsh1.workers.dev
   WR-->>Dev: deployed version id
 ```
 
@@ -166,7 +167,7 @@ vp test    # unit tests and the Worker tests in workerd
 ### After a deploy
 
 ```sh
-curl https://draw.huynhduongsh1.workers.dev/api/health
+curl https://draw.betty2310.com/api/health
 # {"ok":true,"colo":"SIN"}
 ```
 

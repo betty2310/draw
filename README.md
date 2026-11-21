@@ -10,7 +10,7 @@
 </p>
 
 <p align="center">
-  <a href="https://draw.huynhduongsh1.workers.dev"><b>Open the app</b></a> ·
+  <a href="https://draw.betty2310.com"><b>Open the app</b></a> ·
   <a href="docs/architecture.md">Architecture</a> ·
   <a href="docs/deploy.md">Deploy</a> ·
   <a href="docs/sequences.md">Sequence diagrams</a> ·
