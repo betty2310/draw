@@ -4,6 +4,11 @@
   "main": "./worker/index.ts",
   "compatibility_date": "2026-11-01",
   "observability": { "enabled": true },
+  "vars": {
+    // The OAuth client of "Sign in with Google". GOOGLE_CLIENT_SECRET is a secret:
+    // `wrangler secret put GOOGLE_CLIENT_SECRET` in production, `.dev.vars` for local dev.
+    "GOOGLE_CLIENT_ID": "96850366535-ggtionv0s1117mq9jv88pkff0trknk55.apps.googleusercontent.com",
+  },
   "assets": {
     "not_found_handling": "single-page-application",
     // The Worker handles the API. All other paths are static files.

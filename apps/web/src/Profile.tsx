@@ -1,28 +1,14 @@
-import { Button, Dialog, Input, LayerCard } from "@cloudflare/kumo";
+import { Banner, Button, LayerCard } from "@cloudflare/kumo";
 import {
-  ArrowRightIcon,
   ClockCounterClockwiseIcon,
   CloudCheckIcon,
   GitBranchIcon,
+  GoogleLogoIcon,
+  WarningCircleIcon,
   type Icon,
 } from "@phosphor-icons/react";
-import { useState, type ReactNode } from "react";
-import { getAuthor, getEmail, setAuthor, setEmail } from "./api.ts";
-
-/** The person who uses this browser. The name is the author of each version. */
-export interface Profile {
-  name: string;
-  email: string;
-}
-
-export const loadProfile = (): Profile => ({ name: getAuthor(), email: getEmail() });
-
-export function saveProfile(profile: Profile) {
-  setAuthor(profile.name);
-  setEmail(profile.email);
-}
-
-const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+import { useState } from "react";
+import { signInUrl } from "./api.ts";
 
 /** The mascot from the app icon: the cat with a pencil in its mouth. */
 export function Mascot({ className }: { className?: string }) {
@@ -49,8 +35,21 @@ export function Brand({ large = false }: { large?: boolean }) {
 // Vietnamese initials can have combining marks, so a letter is a grapheme, not a code point.
 const graphemes = new Intl.Segmenter(undefined, { granularity: "grapheme" });
 
-/** A circle with the initials of the name. Each name gets its own color. */
-export function Avatar({ name }: { name: string }) {
+/** The Google picture, or a circle with the initials of the name. Each name gets its own color. */
+export function Avatar({ name, picture }: { name: string; picture?: string }) {
+  const [broken, setBroken] = useState(false);
+  if (picture && !broken) {
+    return (
+      <img
+        src={picture}
+        alt=""
+        // Google refuses some picture requests that carry a referrer.
+        referrerPolicy="no-referrer"
+        className="size-7 shrink-0 rounded-full object-cover"
+        onError={() => setBroken(true)}
+      />
+    );
+  }
   const initials = name
     .split(/\s+/)
     .filter(Boolean)
@@ -68,83 +67,6 @@ export function Avatar({ name }: { name: string }) {
     >
       {initials}
     </span>
-  );
-}
-
-/** The display name and the optional email. */
-function ProfileForm({
-  initial,
-  submitLabel,
-  onSubmit,
-  cancel,
-}: {
-  initial: Profile;
-  submitLabel: string;
-  onSubmit: (profile: Profile) => void;
-  /** A dialog has a cancel button, and its buttons are at the right. */
-  cancel?: ReactNode;
-}) {
-  const [name, setName] = useState(initial.name);
-  const [email, setEmailValue] = useState(initial.email);
-  const [checkEmail, setCheckEmail] = useState(false);
-  const emailValid = !email.trim() || EMAIL_PATTERN.test(email.trim());
-  const emailError =
-    checkEmail && !emailValid ? "Type a valid email address, or leave it empty." : undefined;
-
-  return (
-    <form
-      noValidate
-      className="flex flex-col gap-5"
-      onSubmit={(event) => {
-        event.preventDefault();
-        if (!name.trim()) return;
-        if (!emailValid) return setCheckEmail(true);
-        onSubmit({ name: name.trim(), email: email.trim() });
-      }}
-    >
-      <Input
-        label="Display name"
-        description="Others see this name on each version that you save."
-        placeholder="For example, Minh Anh"
-        autoComplete="name"
-        autoFocus
-        maxLength={100}
-        value={name}
-        onChange={(event) => setName(event.target.value)}
-      />
-      <Input
-        label="Email"
-        required={false}
-        type="email"
-        autoComplete="email"
-        placeholder="you@example.com"
-        description="Only this browser keeps it."
-        maxLength={200}
-        value={email}
-        error={emailError}
-        onChange={(event) => setEmailValue(event.target.value)}
-        onBlur={() => setCheckEmail(true)}
-      />
-      {cancel ? (
-        <div className="flex justify-end gap-2">
-          {cancel}
-          <Button type="submit" variant="primary" disabled={!name.trim()}>
-            {submitLabel}
-          </Button>
-        </div>
-      ) : (
-        <Button
-          type="submit"
-          variant="primary"
-          size="lg"
-          className="mt-1 w-full"
-          disabled={!name.trim()}
-        >
-          {submitLabel}
-          <ArrowRightIcon weight="bold" />
-        </Button>
-      )}
-    </form>
   );
 }
 
@@ -166,8 +88,8 @@ const FEATURES: { icon: Icon; title: string; text: string }[] = [
   },
 ];
 
-/** The first page. It asks for the display name before the app opens. */
-export function WelcomePage({ onDone }: { onDone: (profile: Profile) => void }) {
+/** The first page, for a browser with no session. `next` is the page to open after the sign-in. */
+export function WelcomePage({ next, failed }: { next: string; failed: boolean }) {
   return (
     <main className="welcome min-h-screen">
       <div className="mx-auto grid min-h-screen max-w-5xl items-center gap-12 px-6 py-12 lg:grid-cols-[1fr_26rem] lg:gap-16">
@@ -178,7 +100,7 @@ export function WelcomePage({ onDone }: { onDone: (profile: Profile) => void }) 
               Diagrams that keep their history.
             </h1>
             <p className="max-w-md text-lg text-kumo-subtle">
-              Draw in the Excalidraw editor with your team. No account is necessary.
+              Draw in the Excalidraw editor. Your projects are in your own workspace.
             </p>
           </div>
           <ul className="hidden flex-col gap-5 sm:flex">
@@ -199,57 +121,32 @@ export function WelcomePage({ onDone }: { onDone: (profile: Profile) => void }) 
           <LayerCard.Secondary>Before you start</LayerCard.Secondary>
           <LayerCard.Primary className="flex flex-col gap-6 p-6">
             <div className="flex flex-col gap-1.5">
-              <h2 className="text-xl font-semibold text-kumo-strong">What is your name?</h2>
+              <h2 className="text-xl font-semibold text-kumo-strong">Sign in</h2>
               <p className="text-sm text-kumo-subtle">
-                This browser keeps your name. You can change it later.
+                Use your Google account. The app gets only your name, email address and picture.
+                Your name shows on each version that you save.
               </p>
             </div>
-            <ProfileForm
-              initial={{ name: "", email: "" }}
-              submitLabel="Continue"
-              onSubmit={onDone}
-            />
+            {failed && (
+              <Banner
+                variant="error"
+                icon={<WarningCircleIcon weight="fill" />}
+                title="The sign-in did not complete"
+                description="Try again."
+              />
+            )}
+            <Button
+              variant="primary"
+              size="lg"
+              className="w-full"
+              icon={<GoogleLogoIcon weight="bold" />}
+              onClick={() => location.assign(signInUrl(next))}
+            >
+              Sign in with Google
+            </Button>
           </LayerCard.Primary>
         </LayerCard>
       </div>
     </main>
-  );
-}
-
-/** Changes the display name and the email. */
-export function ProfileDialog({
-  profile,
-  onSave,
-  onClose,
-}: {
-  profile: Profile;
-  onSave: (profile: Profile) => void;
-  onClose: () => void;
-}) {
-  const [open, setOpen] = useState(true);
-  return (
-    <Dialog.Root
-      open={open}
-      onOpenChange={setOpen}
-      onOpenChangeComplete={(isOpen) => !isOpen && onClose()}
-    >
-      <Dialog size="lg" className="flex flex-col gap-5 p-6">
-        <div className="flex flex-col gap-1.5">
-          <Dialog.Title className="text-lg font-semibold">Your profile</Dialog.Title>
-          <Dialog.Description className="text-sm text-kumo-subtle">
-            A new name shows on the versions that you save after the change.
-          </Dialog.Description>
-        </div>
-        <ProfileForm
-          initial={profile}
-          submitLabel="Save"
-          onSubmit={(next) => {
-            onSave(next);
-            setOpen(false);
-          }}
-          cancel={<Dialog.Close render={(props) => <Button {...props}>Cancel</Button>} />}
-        />
-      </Dialog>
-    </Dialog.Root>
   );
 }

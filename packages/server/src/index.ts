@@ -1,4 +1,6 @@
 import { Hono, type Context } from "hono";
+import { csrf } from "hono/csrf";
+import { createMiddleware } from "hono/factory";
 import {
   MAIN_BRANCH,
   MAX_IMAGE_BYTES,
@@ -9,6 +11,8 @@ import {
   type ProjectPatch,
   type VersionInfo,
 } from "@draw/shared";
+import { authRoutes, refuse, requireUser, type AppEnv } from "./auth.ts";
+import { db } from "./db.ts";
 import { ProjectRepo, type Failure } from "./project-repo.ts";
 
 export { ProjectRepo };
@@ -16,31 +20,26 @@ export { ProjectRepo };
 export interface Env {
   PROJECT_REPO: DurableObjectNamespace<ProjectRepo>;
   DB: D1Database;
+  /** The OAuth client of "Sign in with Google". Not secret. */
+  GOOGLE_CLIENT_ID: string;
+  /** Set with `wrangler secret put` in production, and in `.dev.vars` for local dev. */
+  GOOGLE_CLIENT_SECRET: string;
 }
-
-const PROJECTS_SCHEMA = `CREATE TABLE IF NOT EXISTS projects (
-  id TEXT PRIMARY KEY,
-  name TEXT NOT NULL,
-  thumb TEXT NOT NULL DEFAULT '',
-  created_at INTEGER NOT NULL,
-  updated_at INTEGER NOT NULL,
-  deleted_at INTEGER
-)`;
 
 /** A thumbnail is a small PNG data URL. This limit keeps the project list fast. */
 const MAX_THUMB_CHARS = 200_000;
 
-// One check for each Worker instance, so a new database (local dev, tests) needs no manual step.
-let schemaReady: Promise<unknown> | undefined;
-function db(env: Env): Promise<D1Database> {
-  schemaReady ??= env.DB.prepare(PROJECTS_SCHEMA)
-    .run()
-    .catch((error) => {
-      schemaReady = undefined;
-      throw error;
-    });
-  return schemaReady.then(() => env.DB);
-}
+/** A project of a different workspace gets 404, so nobody learns which project ids exist. */
+const requireProject = createMiddleware<AppEnv>(async (c, next) => {
+  const row = await (
+    await db(c.env)
+  )
+    .prepare("SELECT 1 FROM projects WHERE id = ? AND workspace_id = ?")
+    .bind(c.req.param("id"), c.get("user").workspaceId)
+    .first();
+  if (!row) return refuse(c, 404, "Not found");
+  await next();
+});
 
 interface ProjectRow {
   id: string;
@@ -63,20 +62,27 @@ const toProject = (row: ProjectRow): Project => ({
 const cleanName = (name: unknown) =>
   typeof name === "string" ? name.trim().slice(0, 200) : undefined;
 
-export const app = new Hono<{ Bindings: Env }>()
+export const app = new Hono<AppEnv>()
+  // A form on a different site cannot post to the API. JSON requests need CORS, which is off.
+  .use("/api/*", csrf())
   .get("/api/health", async (c) => {
     const row = await c.env.DB.prepare("SELECT 1 AS ok").first<{ ok: number }>();
     const colo = (c.req.raw.cf?.colo as string | undefined) ?? "local";
     return c.json<HealthResponse>({ ok: row?.ok === 1, colo });
   })
+  .route("/api/auth", authRoutes)
+  // "/*" also matches the path without it, so these cover "/api/projects" and "/api/projects/:id".
+  .use("/api/projects/*", requireUser)
+  .use("/api/projects/:id/*", requireProject)
   .get("/api/projects", async (c) => {
     const trash = c.req.query("trash") === "1";
     const { results } = await (
       await db(c.env)
     )
       .prepare(
-        `SELECT * FROM projects WHERE deleted_at IS ${trash ? "NOT NULL" : "NULL"} ORDER BY updated_at DESC`,
+        `SELECT * FROM projects WHERE workspace_id = ? AND deleted_at IS ${trash ? "NOT NULL" : "NULL"} ORDER BY updated_at DESC`,
       )
+      .bind(c.get("user").workspaceId)
       .all<ProjectRow>();
     return c.json<Project[]>(results.map(toProject));
   })
@@ -94,8 +100,10 @@ export const app = new Hono<{ Bindings: Env }>()
     await (
       await db(c.env)
     )
-      .prepare("INSERT INTO projects (id, name, created_at, updated_at) VALUES (?, ?, ?, ?)")
-      .bind(row.id, row.name, now, now)
+      .prepare(
+        "INSERT INTO projects (id, name, created_at, updated_at, workspace_id) VALUES (?, ?, ?, ?, ?)",
+      )
+      .bind(row.id, row.name, now, now, c.get("user").workspaceId)
       .run();
     return c.json<Project>(toProject(row), 201);
   })
@@ -139,7 +147,13 @@ export const app = new Hono<{ Bindings: Env }>()
     if (c.req.header("Upgrade") !== "websocket") {
       return c.text("Expected a WebSocket upgrade", 426);
     }
-    return c.env.PROJECT_REPO.getByName(c.req.param("id")).fetch(c.req.raw);
+    // SameSite cookies already stop most cross-site sockets. This check stops the rest.
+    const origin = c.req.header("Origin");
+    if (origin && origin !== new URL(c.req.url).origin) return refuse(c, 403, "Wrong origin");
+    // The author of each save comes from the session, not from the browser.
+    const url = new URL(c.req.url);
+    url.searchParams.set("author", c.get("user").name);
+    return repo(c.env, c.req.param("id")).fetch(new Request(url, c.req.raw));
   })
   .put("/api/projects/:id/images/:fileId", async (c) => {
     const bytes = await c.req.arrayBuffer();
@@ -159,8 +173,9 @@ export const app = new Hono<{ Bindings: Env }>()
     if (!image) return c.json({ error: "Not found" }, 404);
     return c.body(image.bytes, 200, {
       "Content-Type": image.mime,
-      // The file id is the hash of the content, so an image never changes.
-      "Cache-Control": "public, max-age=31536000, immutable",
+      // The file id is the hash of the content, so an image never changes. Only the owner can
+      // read it, so shared caches must not keep it.
+      "Cache-Control": "private, max-age=31536000, immutable",
     });
   })
   .get("/api/projects/:id/versions", async (c) => {
@@ -192,7 +207,7 @@ export const app = new Hono<{ Bindings: Env }>()
   )
   .post("/api/projects/:id/branches", async (c) => {
     const body = await c.req.json<CreateBranchRequest>();
-    const result = await repo(c.env, c.req.param("id")).createBranch(body);
+    const result = await repo(c.env, c.req.param("id")).createBranch(body, c.get("user").name);
     return "error" in result ? fail(c, result) : c.json<BranchInfo>(result, 201);
   })
   .patch("/api/projects/:id/branches/:name", async (c) => {

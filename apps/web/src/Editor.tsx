@@ -36,7 +36,6 @@ import {
   createBranch,
   deleteBranch,
   editorPath,
-  getAuthor,
   getProject,
   getVersionScene,
   navigate,
@@ -169,7 +168,7 @@ export default function Editor({ projectId, branch }: { projectId: string; branc
       }
     };
 
-    const sync = new ProjectSync(projectId, branch, getAuthor(), {
+    const sync = new ProjectSync(projectId, branch, {
       serialize: () => serialize(apiRef.current!),
       files: () => imageFiles(apiRef.current!),
       applyRemote(json, merge) {

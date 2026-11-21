@@ -1,7 +1,8 @@
 import { Loader } from "@cloudflare/kumo";
-import { MAIN_BRANCH } from "@draw/shared";
+import { MAIN_BRANCH, type User } from "@draw/shared";
 import { lazy, Suspense, useEffect, useState } from "react";
-import { loadProfile, saveProfile, WelcomePage, type Profile } from "./Profile.tsx";
+import { getMe, SIGNED_OUT_EVENT } from "./api.ts";
+import { WelcomePage } from "./Profile.tsx";
 import { ProjectList } from "./ProjectList.tsx";
 
 // The editor is large, so the project list loads without it.
@@ -13,22 +14,29 @@ export function App() {
   const [path, setPath] = useState(location.pathname);
   // The branch is in the query, so a switch of branch opens a new editor.
   const [search, setSearch] = useState(location.search);
-  const [profile, setProfile] = useState(loadProfile);
-  const changeProfile = (next: Profile) => {
-    saveProfile(next);
-    setProfile(next);
-  };
+  /** Undefined while the app asks the server. */
+  const [user, setUser] = useState<User | null>();
 
   useEffect(() => {
+    void getMe().then(setUser);
+    const onSignedOut = () => setUser(null);
     const onPopState = () => {
       setPath(location.pathname);
       setSearch(location.search);
     };
+    addEventListener(SIGNED_OUT_EVENT, onSignedOut);
     addEventListener("popstate", onPopState);
-    return () => removeEventListener("popstate", onPopState);
+    return () => {
+      removeEventListener(SIGNED_OUT_EVENT, onSignedOut);
+      removeEventListener("popstate", onPopState);
+    };
   }, []);
 
-  if (!profile.name) return <WelcomePage onDone={changeProfile} />;
+  if (user === undefined) return <PageLoader />;
+  if (user === null) {
+    const signInFailed = new URLSearchParams(search).get("signin") === "failed";
+    return <WelcomePage next={path === "/" ? "/" : path + search} failed={signInFailed} />;
+  }
 
   const projectId = projectIdFromPath(path);
   if (projectId) {
@@ -39,7 +47,7 @@ export function App() {
       </Suspense>
     );
   }
-  return <ProjectList profile={profile} onProfileChange={changeProfile} />;
+  return <ProjectList user={user} onSignedOut={() => setUser(null)} />;
 }
 
 function PageLoader() {

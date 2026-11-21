@@ -135,6 +135,7 @@ export class ProjectRepo extends DurableObject<Env> {
     const params = new URL(request.url).searchParams;
     const branch = params.get("branch") ?? MAIN_BRANCH;
     const client = params.get("client") ?? crypto.randomUUID();
+    // The Worker sets the author from the session.
     const author = (params.get("author") ?? "").slice(0, 100);
 
     const { 0: browser, 1: server } = new WebSocketPair();
@@ -300,7 +301,7 @@ export class ProjectRepo extends DurableObject<Env> {
   }
 
   /** Adds a branch with a first version that has a copy of the scene of `fromVersionId`. */
-  async createBranch(request: CreateBranchRequest): Promise<BranchInfo | Failure> {
+  async createBranch(request: CreateBranchRequest, author: string): Promise<BranchInfo | Failure> {
     const name = cleanBranchName(request.name);
     if (!name) return { error: "The branch needs a name", status: 400 };
     if (this.#branchExists(name)) return { error: `The branch "${name}" exists`, status: 409 };
@@ -325,7 +326,7 @@ export class ProjectRepo extends DurableObject<Env> {
       name,
       source.scene,
       source.hash,
-      String(request.author ?? "").slice(0, 100),
+      author.slice(0, 100),
       now,
       now,
     );

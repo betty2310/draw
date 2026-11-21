@@ -5,14 +5,14 @@ import {
   FolderOpenIcon,
   PencilSimpleLineIcon,
   PlusIcon,
+  SignOutIcon,
   TrashIcon,
-  UserIcon,
   WarningCircleIcon,
 } from "@phosphor-icons/react";
-import type { Project } from "@draw/shared";
+import type { Project, User } from "@draw/shared";
 import { useEffect, useState } from "react";
-import { createProject, listProjects, navigate, updateProject } from "./api.ts";
-import { Avatar, Brand, Mascot, ProfileDialog, type Profile } from "./Profile.tsx";
+import { createProject, listProjects, navigate, signOut, updateProject } from "./api.ts";
+import { Avatar, Brand, Mascot } from "./Profile.tsx";
 import { TextDialog, type TextDialogProps } from "./TextDialog.tsx";
 
 const relativeTime = new Intl.RelativeTimeFormat(undefined, { numeric: "auto" });
@@ -36,18 +36,11 @@ function timeAgo(time: number) {
   return "";
 }
 
-export function ProjectList({
-  profile,
-  onProfileChange,
-}: {
-  profile: Profile;
-  onProfileChange: (profile: Profile) => void;
-}) {
+export function ProjectList({ user, onSignedOut }: { user: User; onSignedOut: () => void }) {
   const [trash, setTrash] = useState(false);
   const [projects, setProjects] = useState<Project[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [dialog, setDialog] = useState<TextDialogProps | null>(null);
-  const [editProfile, setEditProfile] = useState(false);
 
   useEffect(() => {
     let current = true;
@@ -76,7 +69,7 @@ export function ProjectList({
       title: "New project",
       label: "Project name",
       initial: "Untitled",
-      note: "All persons with the link to this app can see and open the project.",
+      note: "Only you can see and open the project.",
       submit: "Create project",
       onSubmit: async (name) => {
         const project = await createProject(name);
@@ -104,28 +97,25 @@ export function ProjectList({
           <DropdownMenu>
             <DropdownMenu.Trigger
               render={
-                <Button variant="ghost" aria-label="Your profile">
-                  <Avatar name={profile.name} />
-                  <span className="max-w-40 truncate">{profile.name}</span>
+                <Button variant="ghost" aria-label="Your account">
+                  <Avatar name={user.name} picture={user.picture} />
+                  <span className="max-w-40 truncate">{user.name}</span>
                 </Button>
               }
             />
             <DropdownMenu.Content align="end">
               <DropdownMenu.Group>
                 <DropdownMenu.Label>
-                  <span className="block truncate font-medium text-kumo-default">
-                    {profile.name}
-                  </span>
-                  {profile.email && (
-                    <span className="block truncate font-normal text-kumo-subtle">
-                      {profile.email}
-                    </span>
-                  )}
+                  <span className="block truncate font-medium text-kumo-default">{user.name}</span>
+                  <span className="block truncate font-normal text-kumo-subtle">{user.email}</span>
                 </DropdownMenu.Label>
               </DropdownMenu.Group>
               <DropdownMenu.Separator />
-              <DropdownMenu.Item icon={UserIcon} onClick={() => setEditProfile(true)}>
-                Edit profile
+              <DropdownMenu.Item
+                icon={SignOutIcon}
+                onClick={() => signOut().then(onSignedOut, (e: unknown) => setError(String(e)))}
+              >
+                Sign out
               </DropdownMenu.Item>
             </DropdownMenu.Content>
           </DropdownMenu>
@@ -141,7 +131,7 @@ export function ProjectList({
             <p className="text-sm text-kumo-subtle">
               {trash
                 ? "Restore a project to see it in the list again."
-                : "All projects of the workspace. Each change is saved."}
+                : "Only you see these projects. Each change is saved."}
             </p>
           </div>
           <div className="flex items-center gap-3">
@@ -211,13 +201,6 @@ export function ProjectList({
       </main>
 
       {dialog && <TextDialog {...dialog} onClose={() => setDialog(null)} />}
-      {editProfile && (
-        <ProfileDialog
-          profile={profile}
-          onSave={onProfileChange}
-          onClose={() => setEditProfile(false)}
-        />
-      )}
     </div>
   );
 }

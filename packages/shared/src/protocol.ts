@@ -8,14 +8,19 @@ export const MAX_VERSION_NAME = 200;
 export const MAX_SCENE_BYTES = 1.5 * 1024 * 1024;
 export const MAX_IMAGE_BYTES = 1.5 * 1024 * 1024;
 
+/**
+ * Close codes of a project WebSocket that the Worker refuses. The browser cannot read the HTTP
+ * status of a refused upgrade, so the Worker accepts the socket and closes it with this code.
+ */
+export const CLOSE_NO_SESSION = 4401;
+export const CLOSE_NO_PROJECT = 4404;
+
 /** Text that the browser sends to detect a dead connection. The server replies with `PONG`. */
 export const PING = "ping";
 export const PONG = "pong";
 
 export interface SocketParams {
   branch: string;
-  /** The name that the person typed at the first visit. */
-  author: string;
   /** Random id of one browser tab. A tab that connects again keeps its edit lock. */
   client: string;
   /** Hash of the scene that the browser has. The server sends the scene only if it is different. */
@@ -71,8 +76,6 @@ export interface BranchInfo {
 export interface CreateBranchRequest {
   name: string;
   fromVersionId: number;
-  /** The author of the first version of the new branch. */
-  author: string;
 }
 
 /** The newest version of a branch. */
@@ -159,6 +162,15 @@ export interface ProjectPatch {
   /** true moves the project to the trash, false restores it. */
   trashed?: boolean;
   thumb?: string;
+}
+
+/** The signed-in person, from their Google account. The name is the author of each version. */
+export interface User {
+  id: string;
+  email: string;
+  name: string;
+  /** URL of the Google profile picture, or empty. */
+  picture: string;
 }
 
 export interface HealthResponse {

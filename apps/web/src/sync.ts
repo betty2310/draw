@@ -1,5 +1,7 @@
 import { createStore, del, get, set } from "idb-keyval";
 import {
+  CLOSE_NO_PROJECT,
+  CLOSE_NO_SESSION,
   decodeFrame,
   encodeFrame,
   gunzip,
@@ -12,6 +14,7 @@ import {
   type Role,
   type ServerMessage,
 } from "@draw/shared";
+import { signalSignedOut } from "./api.ts";
 
 /** Autosave sends the scene to the server this time after the last change. */
 const SERVER_SAVE_DELAY_MS = 2000;
@@ -82,7 +85,6 @@ export function loadLocalImage(projectId: string, fileId: string) {
 export class ProjectSync {
   readonly #projectId: string;
   #branch: string;
-  readonly #author: string;
   readonly #host: SyncHost;
   /** Random id of this page. A connection again from the same page keeps its edit lock. */
   readonly #client = crypto.randomUUID();
@@ -114,10 +116,9 @@ export class ProjectSync {
   /** A restore that waits for the save of the local changes. */
   #pendingRestore: number | null = null;
 
-  constructor(projectId: string, branch: string, author: string, host: SyncHost) {
+  constructor(projectId: string, branch: string, host: SyncHost) {
     this.#projectId = projectId;
     this.#branch = branch;
-    this.#author = author;
     this.#host = host;
     this.#state = {
       branch,
@@ -294,7 +295,6 @@ export class ProjectSync {
     const url = new URL(
       projectSocketPath(this.#projectId, {
         branch: this.#branch,
-        author: this.#author,
         client: this.#client,
         known: this.#baseHash ?? "",
       }),
@@ -319,8 +319,21 @@ export class ProjectSync {
         void this.#onScene(event.data as ArrayBuffer);
       }
     });
-    socket.addEventListener("close", () => {
-      if (socket === this.#socket) this.#drop();
+    socket.addEventListener("close", (event) => {
+      if (socket !== this.#socket) return;
+      // The Worker refused the socket. A new connection gets the same answer, so stop.
+      if (event.code === CLOSE_NO_SESSION || event.code === CLOSE_NO_PROJECT) {
+        this.stop();
+        this.#update({
+          error:
+            event.code === CLOSE_NO_PROJECT
+              ? "This project does not exist, or it is in the workspace of a different person."
+              : null,
+        });
+        if (event.code === CLOSE_NO_SESSION) signalSignedOut();
+        return;
+      }
+      this.#drop();
     });
   }
 
