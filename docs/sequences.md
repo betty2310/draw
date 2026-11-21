@@ -84,7 +84,7 @@ sequenceDiagram
     S->>IDB: get scene:projectId:branch
     IDB-->>S: LocalCopy (json, baseHash, dirty) or nothing
   and
-    E->>E: setupFonts() loads Shantell Sans, Geist, Geist Mono
+    E->>E: setupFonts() loads DFVN Excalifont, Geist, Geist Mono
   end
   E->>E: show Excalidraw with the local copy
   E->>S: connect() in onInitialize

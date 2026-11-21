@@ -9,7 +9,7 @@ The repository name and the version rules are in "Decisions".
 | Your answer | Effect on the plan |
 | --- | --- |
 | One person edits a branch | The first person who opens a branch edits it. Other persons see the branch as read-only, and they see each save. |
-| Shantell Sans, Geist and Geist Mono | "Hand-drawn" uses Shantell Sans. "Normal" uses Geist. "Code" uses Geist Mono. The app ships the three font files. |
+| DFVN Excalifont, Geist and Geist Mono | "Hand-drawn" uses DFVN Excalifont. "Normal" uses Geist. "Code" uses Geist Mono. The app ships the three font files. |
 | No serif font | Excalidraw has no serif text style, and the plan adds none. |
 | No login, one workspace | All persons with the URL see all projects. Each person types a name one time, and the name is the author of each version. |
 | Autosave makes the history, and a name makes a commit | Each project has a list of autosave versions. You can give a name to a version, and you can create a branch from a version. |
@@ -42,15 +42,17 @@ The stable release 0.18.1 has no minimap. The minimap was added to `master` on 2
 
 The plan pins that exact build. The build is not a release, and its API is different from the 0.18.1 documentation. For example, the `excalidrawAPI` prop is now `onExcalidrawAPI`, and `exportToSvg` is now `exportScene`. An upgrade will be a manual step with a test.
 
-## Fonts: Shantell Sans, Geist and Geist Mono
+## Fonts: DFVN Excalifont, Geist and Geist Mono
 
 The `next` build exports the `Fonts` class. The app replaces three entries in the font registry before the editor starts, and it loads the three files before the editor measures text.
 
 | Excalidraw text style | Font file | Size | Vietnamese letters | License |
 | --- | --- | --- | --- | --- |
-| Hand-drawn (`Excalifont`) | Shantell Sans Informal Regular | 153 KB | 146 of 146 | OFL 1.1 |
+| Hand-drawn (`Excalifont`) | `DFVN-Excalifont-Regular.woff2`, made from the DFVN Excalifont OTF | 73 KB | 146 of 146 | OFL 1.1 |
 | Normal (`Nunito`) | `Geist-Regular.woff2` from npm `geist@1.9.2` | 45 KB | 146 of 146 | OFL 1.1 |
 | Code (`Comic Shanns`) | `GeistMono-Regular.woff2` from npm `geist@1.9.2` | 50 KB | 146 of 146 | OFL 1.1 |
+
+On 2026-11-21 the hand-drawn font changed from Shantell Sans to DFVN Excalifont. DFVN Excalifont is Excalifont with Vietnamese letters added by Dafont.vn, and it has the same metrics as Excalifont (ascender 886, descender -374). The test below was done with Shantell Sans.
 
 I tested the three fonts with the `next` build, React 19 and headless Chromium. The image shows the result. The line at the bottom was typed in the editor, and the minimap is at the lower left.
 
@@ -88,7 +90,7 @@ draw/
 ├─ apps/
 │  └─ web/                   The deployed unit
 │     ├─ src/                React app: project list, editor, history panel
-│     ├─ public/fonts/       Shantell Sans, Geist, Geist Mono (OFL)
+│     ├─ public/fonts/       DFVN Excalifont, Geist, Geist Mono (OFL)
 │     ├─ public/libraries/   The 13 default .excalidrawlib files
 │     ├─ worker/index.ts     Worker entry, exports from @draw/server
 │     ├─ vite.config.ts      React plugin and Cloudflare plugin
@@ -232,7 +234,7 @@ These facts are different from the plan or are new.
 - A browser that loses the edit lock while it has unsaved changes keeps them in IndexedDB. It merges them when it edits again.
 - The edit lock belongs to one page load. A page that connects again, for example after a network change, keeps the lock. A different tab of the same person is a second browser.
 - Deleted elements stay in the saved scene, so a merge does not bring them back.
-- Shantell Sans comes from release 1.011 of `arrowtype/shantell-sans`, not from the tldraw package. The OFL license files are next to the fonts.
+- DFVN Excalifont comes from the DFVN Excalifont 1.000 OTF by Dafont.vn, converted to WOFF2. The OFL license files are next to the fonts.
 - The Worker creates the D1 `projects` table at the first request of each Worker instance, so a new database needs no manual step.
 - The project list gets a new thumbnail at most each 10 seconds while you draw, with the save time.
 - The tests start the real Worker and Durable Object in workerd. They cover the open version, the refused save with an old hash, the edit lock with "Take over", a page that connects again, the project API, and the images. A unit test covers the 5 minute rule.
@@ -317,7 +319,7 @@ Tell me if you do not want one of these packages.
 | `@cloudflare/vite-plugin` 1.69.1, `wrangler` 4 | Local Worker runtime and deploy |
 | `hono` | API routes with shared types between the Worker and the app |
 | `idb-keyval` | IndexedDB storage for the local copy |
-| `geist` 1.9.2 (OFL), Shantell Sans from `arrowtype/shantell-sans` (OFL) | Font files, copied to `public/fonts` |
+| `geist` 1.9.2 (OFL), DFVN Excalifont by Dafont.vn (OFL) | Font files, copied to `public/fonts` |
 
 The plan has no UI component library and no router library. The app has two pages.
 

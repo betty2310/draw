@@ -1,4 +1,5 @@
-Copyright 2022 The Shantell Sans Project Authors (https://github.com/arrowtype/shantell-sans)
+Copyright (c) 2024 by Excalidraw. All rights reserved.
+Vietnamese letters added by Dafont.vn (DFVN Excalifont, version 1.000).
 
 This Font Software is licensed under the SIL Open Font License, Version 1.1.
 This license is copied below, and is also available with a FAQ at:

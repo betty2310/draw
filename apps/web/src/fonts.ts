@@ -8,9 +8,9 @@ import { FONT_FAMILY, Fonts } from "@excalidraw/excalidraw";
 const APP_FONTS = [
   {
     family: "Excalifont",
-    file: "ShantellSans-Informal-Regular.woff2",
-    ascender: 1020,
-    descender: -320,
+    file: "DFVN-Excalifont-Regular.woff2",
+    ascender: 886,
+    descender: -374,
   },
   { family: "Nunito", file: "Geist-Regular.woff2", ascender: 1005, descender: -295 },
   { family: "Comic Shanns", file: "GeistMono-Regular.woff2", ascender: 1005, descender: -295 },

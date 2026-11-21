@@ -87,7 +87,7 @@ Other files:
 
 The editor uses the pinned Excalidraw build `0.18.0-3a317b5`, because only that build has the minimap. Its API is different from the 0.18.1 documentation (for example `onExcalidrawAPI` and `exportScene`).
 
-- **Fonts.** `fonts.ts` replaces the registry entries of three Excalidraw text styles: "Hand-drawn" (`Excalifont`) uses Shantell Sans, "Normal" (`Nunito`) uses Geist, and "Code" (`Comic Shanns`) uses Geist Mono. The three files are in `public/fonts`, and they have all Vietnamese letters. The app loads them before the editor measures text. The scene keeps the Excalidraw font numbers.
+- **Fonts.** `fonts.ts` replaces the registry entries of three Excalidraw text styles: "Hand-drawn" (`Excalifont`) uses DFVN Excalifont (Excalifont with Vietnamese letters), "Normal" (`Nunito`) uses Geist, and "Code" (`Comic Shanns`) uses Geist Mono. The three files are in `public/fonts`, and they have all Vietnamese letters. The app loads them before the editor measures text. The scene keeps the Excalidraw font numbers.
 - **Change detection.** `onChange` compares `hashElementsVersion(elements)`, the background color and the number of files with the last value. Only a change of the scene calls `sync.changed()`. A change of the selection or the view does not.
 - **Deleted elements.** The editor saves `getSceneElementsIncludingDeleted()`, so a merge of two copies does not bring a deleted element back.
 - **Status bar.** It shows "Connecting", "Saving", "Saved", "Offline, saved in this browser", or "Read-only. *Name* edits." with a "Take over" button.
