@@ -3,12 +3,15 @@ import {
   ClockCounterClockwiseIcon,
   CloudCheckIcon,
   GitBranchIcon,
+  GithubLogoIcon,
   GoogleLogoIcon,
   WarningCircleIcon,
   type Icon,
 } from "@phosphor-icons/react";
 import { useState } from "react";
-import { signInUrl } from "./api.ts";
+import { navigate, signInUrl } from "./api.ts";
+
+export const GITHUB_URL = "https://github.com/betty2310/draw";
 
 /** The mascot from the app icon: the cat with a pencil in its mouth. */
 export function Mascot({ className }: { className?: string }) {
@@ -91,8 +94,8 @@ const FEATURES: { icon: Icon; title: string; text: string }[] = [
 /** The first page, for a browser with no session. `next` is the page to open after the sign-in. */
 export function WelcomePage({ next, failed }: { next: string; failed: boolean }) {
   return (
-    <main className="welcome min-h-screen">
-      <div className="mx-auto grid min-h-screen max-w-5xl items-center gap-12 px-6 py-12 lg:grid-cols-[1fr_26rem] lg:gap-16">
+    <main className="welcome flex min-h-screen flex-col">
+      <div className="mx-auto grid w-full max-w-5xl flex-1 items-center gap-12 px-6 py-12 lg:grid-cols-[1fr_26rem] lg:gap-16">
         <section className="flex flex-col gap-10">
           <Brand large />
           <div className="flex flex-col gap-4">
@@ -147,6 +150,46 @@ export function WelcomePage({ next, failed }: { next: string; failed: boolean })
           </LayerCard.Primary>
         </LayerCard>
       </div>
+      <SiteFooter />
     </main>
+  );
+}
+
+/** The links at the bottom of each page outside the editor. */
+export function SiteFooter() {
+  const linkClass = "hover:text-kumo-default hover:underline";
+  return (
+    <footer className="mx-auto flex w-full max-w-6xl flex-wrap items-center justify-center gap-x-5 gap-y-2 px-6 py-6 text-sm text-kumo-subtle">
+      <a
+        href="/privacy"
+        className={linkClass}
+        onClick={(event) => {
+          event.preventDefault();
+          navigate("/privacy");
+        }}
+      >
+        Privacy
+      </a>
+      <a
+        href={GITHUB_URL}
+        target="_blank"
+        rel="noreferrer"
+        className={`flex items-center gap-1.5 ${linkClass}`}
+      >
+        <GithubLogoIcon size={16} />
+        Source code
+      </a>
+      <span>
+        Built by{" "}
+        <a
+          href="https://github.com/betty2310"
+          target="_blank"
+          rel="noreferrer"
+          className={linkClass}
+        >
+          betty2310
+        </a>
+      </span>
+    </footer>
   );
 }

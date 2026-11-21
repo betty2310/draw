@@ -2,6 +2,7 @@ import { Loader } from "@cloudflare/kumo";
 import { MAIN_BRANCH, type User } from "@draw/shared";
 import { lazy, Suspense, useEffect, useState } from "react";
 import { getMe, SIGNED_OUT_EVENT } from "./api.ts";
+import { PrivacyPage } from "./Privacy.tsx";
 import { WelcomePage } from "./Profile.tsx";
 import { ProjectList } from "./ProjectList.tsx";
 
@@ -32,6 +33,8 @@ export function App() {
     };
   }, []);
 
+  // Google and visitors read the privacy policy before they sign in.
+  if (path === "/privacy") return <PrivacyPage />;
   if (user === undefined) return <PageLoader />;
   if (user === null) {
     const signInFailed = new URLSearchParams(search).get("signin") === "failed";

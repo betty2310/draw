@@ -12,7 +12,7 @@ import {
 import type { Project, User } from "@draw/shared";
 import { useEffect, useState } from "react";
 import { createProject, listProjects, navigate, signOut, updateProject } from "./api.ts";
-import { Avatar, Brand, Mascot } from "./Profile.tsx";
+import { Avatar, Brand, Mascot, SiteFooter } from "./Profile.tsx";
 import { TextDialog, type TextDialogProps } from "./TextDialog.tsx";
 
 const relativeTime = new Intl.RelativeTimeFormat(undefined, { numeric: "auto" });
@@ -90,7 +90,7 @@ export function ProjectList({ user, onSignedOut }: { user: User; onSignedOut: ()
     });
 
   return (
-    <div className="min-h-screen">
+    <div className="flex min-h-screen flex-col">
       <header className="sticky top-0 z-10 border-b border-kumo-hairline bg-kumo-canvas/90 backdrop-blur">
         <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-6">
           <Brand />
@@ -122,7 +122,7 @@ export function ProjectList({ user, onSignedOut }: { user: User; onSignedOut: ()
         </div>
       </header>
 
-      <main className="mx-auto flex max-w-6xl flex-col gap-6 px-6 py-8">
+      <main className="mx-auto flex w-full max-w-6xl flex-1 flex-col gap-6 px-6 py-8">
         <div className="flex flex-wrap items-end justify-between gap-4">
           <div className="flex flex-col gap-1">
             <h1 className="text-2xl font-semibold tracking-tight text-kumo-strong">
@@ -200,6 +200,7 @@ export function ProjectList({ user, onSignedOut }: { user: User; onSignedOut: ()
         )}
       </main>
 
+      <SiteFooter />
       {dialog && <TextDialog {...dialog} onClose={() => setDialog(null)} />}
     </div>
   );
