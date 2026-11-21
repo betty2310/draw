@@ -62,18 +62,29 @@ The Worker code reads the bindings from `env` (`Env` in `packages/server/src/ind
 export interface Env {
   PROJECT_REPO: DurableObjectNamespace<ProjectRepo>;
   DB: D1Database;
+  GOOGLE_CLIENT_ID: string;
+  GOOGLE_CLIENT_SECRET: string;
 }
 ```
 
 | Binding | Type | Used by |
 | --- | --- | --- |
 | `PROJECT_REPO` | Durable Object namespace | The WebSocket route (`stub.fetch`) and the routes of versions, branches and images (RPC methods on the stub) |
-| `DB` | D1 database | The routes of the project list and `/api/health` |
+| `DB` | D1 database | The routes of the project list, the accounts and `/api/health` |
+| `GOOGLE_CLIENT_ID` | Variable in `wrangler.jsonc` | The Google OAuth client. It is not secret. |
+| `GOOGLE_CLIENT_SECRET` | Secret | The secret of the Google OAuth client |
 | `ASSETS` | Static assets | Added by Wrangler. The code does not use it directly. |
 
 ### Secrets and variables
 
-The Worker has **no secrets and no environment variables**. There is no login, no third-party API, and no key in the code.
+The Worker has one variable and one secret, for "Sign in with Google".
+
+| Name | Where | Value |
+| --- | --- | --- |
+| `GOOGLE_CLIENT_ID` | `vars` in `wrangler.jsonc` | The client ID of the OAuth client `draw web` in the Google Cloud project `draw` |
+| `GOOGLE_CLIENT_SECRET` | `npx wrangler secret put GOOGLE_CLIENT_SECRET` in `apps/web`, or the dashboard: Worker `draw` > Settings > Variables and Secrets, type Secret | The client secret. Google shows it only when you make the client. |
+
+For local dev, put both in `apps/web/.dev.vars`. The OAuth client has two redirect URIs: `https://draw.huynhduongsh1.workers.dev/api/auth/google/callback` and `http://localhost:5173/api/auth/google/callback`. Open the local app on `localhost`, not `127.0.0.1`, or Google refuses the redirect.
 
 The deploy needs two values in the shell or in CI. They are not stored in the Worker:
 
@@ -186,7 +197,7 @@ No schema step is necessary. The Worker creates the D1 `projects` table at the f
 | A new column in D1 | Add an `ALTER TABLE` step. `CREATE TABLE IF NOT EXISTS` does not change an existing table. |
 | A new column in the Durable Object | Add the step in the `ProjectRepo` constructor. Each object runs it when it starts. |
 | A custom domain | Add `routes` with `custom_domain: true` in `wrangler.jsonc`, or add it in the dashboard. |
-| Login | Put Cloudflare Access in front of the domain. No code change is necessary. |
+| A custom domain and Google sign-in | Add `https://<domain>/api/auth/google/callback` to the redirect URIs of the Google OAuth client. |
 
 ## Local development
 

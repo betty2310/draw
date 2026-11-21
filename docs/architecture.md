@@ -4,7 +4,7 @@ This document tells how the draw app works. It is based on the code on `main`. T
 
 ## Overview
 
-The app is an Excalidraw editor with a project list, autosave, a version history with named versions, and branches. There is no login. All persons who have the URL see all projects, and each person types a display name one time.
+The app is an Excalidraw editor with a project list, autosave, a version history with named versions, and branches. Each person signs in with Google. Each user has one workspace, and only that user sees its projects. The Google name is the author of each version.
 
 One Cloudflare Worker serves the React app and the API.
 
@@ -21,7 +21,7 @@ flowchart LR
     UI["React app<br/>ProjectList, Editor, History"]
     Sync["ProjectSync<br/>(sync.ts)"]
     IDB[("IndexedDB<br/>local copy, images, library")]
-    LS[("localStorage<br/>name, email")]
+    LS[("localStorage<br/>last user")]
     UI --> Sync
     Sync <--> IDB
     UI --> LS
@@ -64,7 +64,7 @@ The app has two pages and no router library. `App.tsx` reads `location.pathname`
 
 | Path | Page |
 | --- | --- |
-| any path, when the browser has no display name | `WelcomePage` (`Profile.tsx`). It asks for a display name and an optional email. Both stay in `localStorage` (`draw.author`, `draw.email`). The server never gets the email. |
+| any path, when the browser has no session | `WelcomePage` (`Profile.tsx`) with "Sign in with Google". After the sign-in, the browser opens the same path again. |
 | `/` | `ProjectList.tsx`: the project cards with thumbnails, the Projects and Trash tabs, New project, Rename, Move to trash and Restore. |
 | `/p/<id>` and `/p/<id>?branch=<name>` | `Editor.tsx`, loaded with `React.lazy` because it is large. `main` has no `branch` parameter. A switch of branch opens a new editor. |
 
@@ -75,7 +75,7 @@ Other files:
 | File | Task |
 | --- | --- |
 | `sync.ts` | `ProjectSync`: autosave, the local copy, the WebSocket, the edit lock, restore. See [Autosave and sync](#autosave-and-sync). |
-| `api.ts` | The HTTP calls, the editor path, and the name and email in `localStorage`. |
+| `api.ts` | The HTTP calls, the editor path, the signed-in user (`getMe`, `signOut`), and the `draw:signed-out` event that a 401 sends. |
 | `History.tsx` | The History sidebar: branch selector, "Named versions only" switch, the version graph, and the read-only `VersionPreview`. |
 | `graph.ts` | `layoutGraph`: puts the versions of all branches into lanes like a git graph. |
 | `images.ts` | Loads an image from IndexedDB or from the server. |
@@ -108,37 +108,58 @@ The Worker is a Hono app. `wrangler.jsonc` sets `run_worker_first: ["/api/*"]`, 
 
 | Method and path | Goes to | Task |
 | --- | --- | --- |
-| `GET /api/health` | D1 | Returns `{ ok, colo }`. |
-| `GET /api/projects?trash=1` | D1 | The projects, or the projects in the trash, newest change first. |
-| `POST /api/projects` | D1 | Creates a project with a random UUID. |
+| `GET /api/health` | D1 | Returns `{ ok, colo }`. No session is necessary. |
+| `GET /api/auth/google?next=` | Google | Starts the sign-in. Keeps `state`, `nonce` and the PKCE verifier in the `__Host-draw_signin` cookie (10 minutes) and redirects to Google. |
+| `GET /api/auth/google/callback` | Google, D1 | Checks `state`, sends the code to Google's token endpoint, checks the ID token, finds or makes the user and the workspace, sets the session cookie, and opens `next`. A failure opens `/?signin=failed`. |
+| `GET /api/auth/me` | D1 | The signed-in user, or 401. |
+| `POST /api/auth/logout` | D1 | Deletes the session. |
+| `GET /api/projects?trash=1` | D1 | The projects of the user's workspace, or the projects in its trash, newest change first. |
+| `POST /api/projects` | D1 | Creates a project with a random UUID in the user's workspace. |
 | `GET /api/projects/:id` | D1 | One project. |
 | `PATCH /api/projects/:id` | D1 | Changes `name`, `trashed` or `thumb`. A new thumbnail also sets `updated_at`, so the project moves to the top. |
 | `GET /api/projects/:id/ws` | Durable Object `fetch` | The WebSocket upgrade. Other requests get 426. |
 | `PUT /api/projects/:id/images/:fileId` | `putImage` RPC | Stores an image of at most 1.5 MB (413 if larger). |
-| `GET /api/projects/:id/images/:fileId` | `getImage` RPC | Returns the image with `Cache-Control: immutable`, because the file id comes from the content. |
+| `GET /api/projects/:id/images/:fileId` | `getImage` RPC | Returns the image with `Cache-Control: private, immutable`, because the file id comes from the content and only the owner can read it. |
 | `GET /api/projects/:id/versions?branch=&all=1&named=1&limit=` | `listVersions` RPC | The versions, newest first, at most 500. |
 | `GET /api/projects/:id/versions/:versionId/scene` | `getVersionScene` RPC | The gzip scene of a version, for the preview. |
 | `PATCH /api/projects/:id/versions/:versionId` | `nameVersion` RPC | Gives a name, or removes it with an empty name. |
 | `GET /api/projects/:id/branches` | `listBranches` RPC | The branches, `main` first. |
-| `POST /api/projects/:id/branches` | `createBranch` RPC | Creates a branch from a version. 409 if the name exists. |
+| `POST /api/projects/:id/branches` | `createBranch` RPC | Creates a branch from a version. The author of its first version is the signed-in user. 409 if the name exists. |
 | `PATCH /api/projects/:id/branches/:name` | `renameBranch` RPC | Renames a branch. `main` cannot be renamed. |
 | `DELETE /api/projects/:id/branches/:name` | `deleteBranch` RPC | Deletes a branch and all its versions. `main` cannot be deleted. |
 
+### Sign-in and access
+
+`packages/server/src/auth.ts` has the Google sign-in and the sessions. There is no auth library.
+
+- The app asks Google only for `openid email profile`. It keeps no Google token.
+- The ID token comes straight from Google's token endpoint over TLS, so the Worker does not check its signature ([OpenID Connect Core 3.1.3.7](https://openid.net/specs/openid-connect-core-1_0.html), item 6). It checks `iss`, `aud`, `exp`, `nonce` and `email_verified`. This keeps the sign-in far below the 10 ms CPU limit of the Free plan. A password hash would not fit.
+- The user is found by the Google `sub`, not by the email, because an email can change. The name, the email and the picture follow the Google account at each sign-in.
+- The session cookie `__Host-draw_session` (`HttpOnly`, `Secure`, `SameSite=Lax`) holds a random 32-byte token. D1 keeps only its SHA-256. A session lasts 30 days, and a request with less than 15 days left extends it.
+- Each `/api/projects*` route needs a session (401 if not). Each `/api/projects/:id*` route also needs the project to be in the user's workspace. Else the answer is 404, so nobody learns which project ids exist.
+- `hono/csrf` refuses a form post from a different site. The WebSocket route refuses a different `Origin`.
+- The browser cannot read the HTTP status of a refused WebSocket upgrade. So the Worker accepts the socket and closes it with 4401 (no session) or 4404 (not your project). The editor then stops and does not connect again.
+
 The Worker gets the Durable Object with `env.PROJECT_REPO.getByName(projectId)`, so each project id always maps to the same object. A method of the object that returns a failure (`{ error, status }`) becomes an HTTP error with that status.
 
-### D1: the project list
+### D1: the project list and the accounts
 
-The D1 database has one table. The Worker runs `CREATE TABLE IF NOT EXISTS` one time for each Worker instance, so a new database needs no manual migration.
+`packages/server/src/db.ts` makes the schema one time for each Worker instance, with `CREATE TABLE IF NOT EXISTS` and a check of `PRAGMA table_info` before the `ALTER TABLE`. A new database needs no manual migration.
 
 ```sql
-CREATE TABLE IF NOT EXISTS projects (
+CREATE TABLE projects (
   id TEXT PRIMARY KEY,
   name TEXT NOT NULL,
   thumb TEXT NOT NULL DEFAULT '',   -- PNG data URL, at most 200,000 characters
   created_at INTEGER NOT NULL,
   updated_at INTEGER NOT NULL,
-  deleted_at INTEGER                -- not null when the project is in the trash
-)
+  deleted_at INTEGER,               -- not null when the project is in the trash
+  workspace_id TEXT                 -- null for a project from before the accounts: nobody sees it
+);
+CREATE TABLE users (id, email, name, picture, created_at);
+CREATE TABLE identities (provider, subject, user_id);   -- ('google', sub); a second provider adds rows
+CREATE TABLE sessions (id, user_id, expires_at, created_at);  -- id = SHA-256 of the cookie token
+CREATE TABLE workspaces (id, owner_id, name, created_at);     -- one for each user now
 ```
 
 The project list reads only this table. It does not wake a Durable Object.
@@ -186,13 +207,13 @@ The object uses the Hibernation WebSocket API (`ctx.acceptWebSocket`). Clients s
 ```ts
 interface Attachment {
   client: string; // random id of one page load
-  author: string; // display name
+  author: string; // the Google name of the user, set by the Worker
   branch: string; // the branch that the socket shows
   editor: boolean; // true for the one socket that edits the branch
 }
 ```
 
-The browser connects to `/api/projects/:id/ws?branch=&author=&client=&known=`. `known` is the hash of the scene that the browser has.
+The browser connects to `/api/projects/:id/ws?branch=&client=&known=`. `known` is the hash of the scene that the browser has. The Worker adds `author` with the name of the signed-in user, so a browser cannot save as a different person.
 
 Messages from the browser:
 
@@ -326,7 +347,7 @@ A viewer shows each `scene` frame and replaces its scene. A browser that loses t
 | IndexedDB `draw`/`local` | `scene:<projectId>:<branch>` | The local copy of each branch |
 | IndexedDB `draw`/`local` | `file:<projectId>:<fileId>` | The pasted images |
 | IndexedDB `draw-library`/`library` | `items` | The Excalidraw library. The first time, it is the 13 default libraries from `public/libraries` (from [libraries.excalidraw.com](https://libraries.excalidraw.com)). |
-| `localStorage` | `draw.author`, `draw.email` | The display name (the author of each version) and the optional email |
+| `localStorage` | `draw.user` | The last signed-in user, so the app opens offline. `/api/auth/me` replaces it at each start. |
 
 ## Tests
 
@@ -337,7 +358,9 @@ A viewer shows each `scene` frame and replaces its scene. A browser that loses t
 
 ## Limits
 
-- There is no login. All persons with the URL can read, change and delete all projects. The trash makes a project delete reversible. Cloudflare Access can be added later without a code change.
+- Each workspace has one user. Two persons cannot open the same project. The edit lock is for one person with two tabs or two devices.
+- Sign-in uses only Google. A person with no Google account cannot use the app.
+- The local copies in IndexedDB do not have the user in their key. After a sign-out, they stay in the browser.
 - One person edits a branch at a time. There is no live editing of one branch by two persons, and no merge of branches.
 - A browser that was offline on a branch, and comes back after a rename or a delete of that branch, opens `main`. Its unsaved changes on that branch stay in IndexedDB, but the app does not show them.
 - A restore replaces the scene. If a browser has unsaved changes from before the restore and takes over later, the merge can bring back elements that the restore removed.

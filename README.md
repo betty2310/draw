@@ -17,19 +17,19 @@
   <a href="docs/plan.md">Plan</a>
 </p>
 
-The app runs on the Cloudflare free plan: one Worker, one Durable Object with SQLite for each project, and one D1 database. There is no login. Each person types a display name one time, and the name is the author of each version.
+The app runs on the Cloudflare free plan: one Worker, one Durable Object with SQLite for each project, and one D1 database. Each person signs in with Google and has their own workspace. The Google name is the author of each version.
 
 ## Features
 
 ### First page
 
-Type a display name and an optional email. Only this browser keeps them.
+Sign in with your Google account. The app gets only your name, email address and picture.
 
-![First page with the mascot, the feature list and the name form](docs/images/readme/first-page.png)
+![First page with the mascot, the feature list and the Sign in with Google button](docs/images/readme/first-page.png)
 
 ### Project list
 
-Create, rename, move to trash and restore projects. Each card shows a thumbnail of the `main` branch.
+Create, rename, move to trash and restore projects. Only you see your projects. Each card shows a thumbnail of the `main` branch.
 
 ![Project list with four project cards and the Projects and Trash tabs](docs/images/readme/project-list.png)
 

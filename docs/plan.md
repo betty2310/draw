@@ -11,7 +11,7 @@ The repository name and the version rules are in "Decisions".
 | One person edits a branch | The first person who opens a branch edits it. Other persons see the branch as read-only, and they see each save. |
 | DFVN Excalifont, Geist and Geist Mono | "Hand-drawn" uses DFVN Excalifont. "Normal" uses Geist. "Code" uses Geist Mono. The app ships the three font files. |
 | No serif font | Excalidraw has no serif text style, and the plan adds none. |
-| No login, one workspace | All persons with the URL see all projects. Each person types a name one time, and the name is the author of each version. |
+| No login, one workspace | All persons with the URL see all projects. Each person types a name one time, and the name is the author of each version. Replaced later by Google sign-in with one workspace for each user (see [architecture.md](architecture.md#sign-in-and-access)). |
 | Autosave makes the history, and a name makes a commit | Each project has a list of autosave versions. You can give a name to a version, and you can create a branch from a version. |
 | No merge | Version 1 has no merge of branches. |
 | Latest Excalidraw, for the minimap | The plan pins the build `0.18.0-3a317b5`. |
@@ -330,7 +330,7 @@ The plan has no UI component library and no router library. The app has two page
 
 ## Risks
 
-- All persons who have the URL can read, change and delete all projects, because there is no login. The trash list makes a delete reversible. Cloudflare Access can be added later with no code change.
+- Version 1 had no login. Google sign-in with one workspace for each user replaced it. A username and password were not used, because a strong password hash needs more than the 10 ms CPU limit of the Free plan.
 - A version with no name is deleted after 30 days. Give a name to each version that you want to keep.
 - The pinned Excalidraw build is not a release. A later build can change the `Fonts` class or the minimap. The signal is a type error or mixed fonts after an upgrade.
 - Vite+ with the Cloudflare plugin works in Phase 0 for dev, build and deploy. If a later version breaks it, the fallback is `wrangler dev` for the Worker and a Vite proxy for `/api`.

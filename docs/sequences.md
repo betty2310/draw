@@ -43,21 +43,35 @@ sequenceDiagram
   participant W as Worker
   participant D1
 
+  participant G as Google
+
   U->>App: open /
-  alt no display name in localStorage
-    App-->>U: WelcomePage asks for the name and an optional email
-    U->>App: Continue
-    App->>App: store draw.author and draw.email in localStorage
+  App->>W: GET /api/auth/me (session cookie)
+  W->>D1: create the schema if necessary (one time for each Worker instance)
+  alt no session
+    W-->>App: 401
+    App-->>U: WelcomePage with Sign in with Google
+    U->>W: GET /api/auth/google?next=/
+    W-->>U: 302 to Google, cookie with state, nonce, PKCE verifier
+    U->>G: choose an account
+    G-->>U: 302 to /api/auth/google/callback?code&state
+    U->>W: GET /api/auth/google/callback
+    W->>G: POST token endpoint (code, client secret, PKCE verifier)
+    G-->>W: ID token
+    W->>W: check state, iss, aud, exp, nonce, email_verified
+    W->>D1: find the user by Google sub, or INSERT user, identity, workspace
+    W->>D1: INSERT session (SHA-256 of the token)
+    W-->>U: 302 to next, session cookie
   end
+  W-->>App: User (name, email, picture)
   App->>W: GET /api/projects
-  W->>D1: CREATE TABLE IF NOT EXISTS projects (one time for each Worker instance)
-  W->>D1: SELECT * FROM projects WHERE deleted_at IS NULL ORDER BY updated_at DESC
+  W->>D1: SELECT * FROM projects WHERE workspace_id = ? AND deleted_at IS NULL ORDER BY updated_at DESC
   D1-->>W: rows
   W-->>App: Project[] with thumbnails
   App-->>U: project cards
   U->>App: New project
   App->>W: POST /api/projects with the name
-  W->>D1: INSERT INTO projects
+  W->>D1: INSERT INTO projects with the workspace of the user
   W-->>App: 201 Project
   App->>App: navigate to /p/id
 ```
@@ -77,9 +91,9 @@ sequenceDiagram
   participant D1
 
   E->>W: GET /api/projects/id
-  W->>D1: SELECT the project
+  W->>D1: session, and the project in the user's workspace? else 404
   W-->>E: name for the status bar
-  E->>S: new ProjectSync(projectId, branch, author)
+  E->>S: new ProjectSync(projectId, branch)
   par
     S->>IDB: get scene:projectId:branch
     IDB-->>S: LocalCopy (json, baseHash, dirty) or nothing
@@ -88,8 +102,9 @@ sequenceDiagram
   end
   E->>E: show Excalidraw with the local copy
   E->>S: connect() in onInitialize
-  S->>W: WebSocket /api/projects/id/ws with branch, author, client, known=baseHash
-  W->>DO: getByName(id).fetch(upgrade request)
+  S->>W: WebSocket /api/projects/id/ws with branch, client, known=baseHash
+  W->>D1: session, and the project in the user's workspace? else close 4401 or 4404
+  W->>DO: getByName(id).fetch(upgrade request with author = the user's name)
   DO->>DO: branch exists? first socket of the branch is the editor
   DO->>DO: acceptWebSocket, serializeAttachment(client, author, branch, editor)
   DO-->>S: hello (role, editor name, head, imageIds)
@@ -415,8 +430,8 @@ sequenceDiagram
     S->>DO: save frame
     DO-->>S: saved
   end
-  E->>W: POST /api/projects/id/branches (name, fromVersionId, author)
-  W->>DO: createBranch RPC
+  E->>W: POST /api/projects/id/branches (name, fromVersionId)
+  W->>DO: createBranch RPC with author = the user's name
   DO->>DO: name empty? 400. name exists? 409. version missing? 404
   DO->>DO: INSERT INTO branches (name, from_version_id)
   DO->>DO: INSERT the first version of the branch with a copy of the scene
