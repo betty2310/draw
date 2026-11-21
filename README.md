@@ -1,12 +1,12 @@
 <p align="center">
-  <img src="docs/design/mascot/cat-pencil-mouth.png" alt="The draw mascot: a white cat with a pencil in its mouth" width="260" />
+  <img src="docs/design/mascot/cat-pencil-mouth.png" alt="The Draw mascot: a white cat with a pencil in its mouth" width="260" />
 </p>
 
-<h1 align="center">draw</h1>
+<h1 align="center">Draw</h1>
 
 <p align="center">
   Diagrams that keep their history.<br />
-  An Excalidraw editor with a project list, autosave, a version history with named versions, and branches.
+  Sketch in Excalidraw with a version history like Git: named versions, branches, and autosave that works offline.
 </p>
 
 <p align="center">

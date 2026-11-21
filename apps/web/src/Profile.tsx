@@ -1,10 +1,11 @@
 import { Banner, Button, LayerCard } from "@cloudflare/kumo";
 import {
-  ClockCounterClockwiseIcon,
   CloudCheckIcon,
   GitBranchIcon,
   GithubLogoIcon,
   GoogleLogoIcon,
+  GraphIcon,
+  TreeStructureIcon,
   WarningCircleIcon,
   type Icon,
 } from "@phosphor-icons/react";
@@ -29,7 +30,7 @@ export function Brand({ large = false }: { large?: boolean }) {
           " font-semibold tracking-tight text-kumo-strong"
         }
       >
-        draw
+        Draw
       </span>
     </span>
   );
@@ -75,19 +76,24 @@ export function Avatar({ name, picture }: { name: string; picture?: string }) {
 
 const FEATURES: { icon: Icon; title: string; text: string }[] = [
   {
-    icon: CloudCheckIcon,
-    title: "Autosave",
-    text: "Each change is saved. You can also draw offline.",
-  },
-  {
-    icon: ClockCounterClockwiseIcon,
-    title: "Version history",
-    text: "Give a name to a version, see it again, or restore it.",
+    icon: GraphIcon,
+    title: "Version history like Git",
+    text: "See every version on a graph. Name the ones that matter, and restore any of them.",
   },
   {
     icon: GitBranchIcon,
-    title: "Branches",
-    text: "Try an idea on a branch. The main drawing does not change.",
+    title: "Branches for new ideas",
+    text: "Try an idea on a branch. Your main drawing does not change.",
+  },
+  {
+    icon: CloudCheckIcon,
+    title: "Autosave, also offline",
+    text: "Each change is saved at once. Keep drawing when the network is down.",
+  },
+  {
+    icon: TreeStructureIcon,
+    title: "Ready for system diagrams",
+    text: "13 icon libraries for networks, servers and architecture, and hand-drawn text with Vietnamese letters.",
   },
 ];
 
@@ -103,7 +109,8 @@ export function WelcomePage({ next, failed }: { next: string; failed: boolean })
               Diagrams that keep their history.
             </h1>
             <p className="max-w-md text-lg text-kumo-subtle">
-              Draw in the Excalidraw editor. Your projects are in your own workspace.
+              Sketch in Excalidraw with a version history like Git. Each change is saved, and you
+              can go back to any version.
             </p>
           </div>
           <ul className="hidden flex-col gap-5 sm:flex">

@@ -1,6 +1,6 @@
 {
-  "name": "draw",
-  "short_name": "draw",
+  "name": "Draw",
+  "short_name": "Draw",
   "description": "Diagrams that keep their history.",
   "start_url": "/",
   "display": "standalone",

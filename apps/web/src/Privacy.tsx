@@ -28,7 +28,7 @@ export function PrivacyPage() {
         <div className="mx-auto flex h-16 max-w-3xl items-center justify-between px-6">
           <a
             href="/"
-            aria-label="draw home page"
+            aria-label="Draw home page"
             onClick={(event) => {
               event.preventDefault();
               navigate("/");
@@ -47,8 +47,8 @@ export function PrivacyPage() {
           <p className="text-sm text-kumo-subtle">Last updated: 22 November 2026</p>
         </div>
         <p>
-          draw is an Excalidraw editor with a project list, autosave, a version history and
-          branches. This page tells which data draw keeps, why, and how you can remove it. draw is a
+          Draw is an Excalidraw editor with a project list, autosave, a version history and
+          branches. This page tells which data Draw keeps, why, and how you can remove it. Draw is a
           personal open-source project by betty2310. The{" "}
           <a href={GITHUB_URL} className={linkClass}>
             source code
@@ -58,8 +58,8 @@ export function PrivacyPage() {
 
         <Section title="Data from your Google account">
           <p>
-            You sign in with Google. draw asks Google only for the scopes <code>openid</code>,{" "}
-            <code>email</code> and <code>profile</code>. From these, draw keeps:
+            You sign in with Google. Draw asks Google only for the scopes <code>openid</code>,{" "}
+            <code>email</code> and <code>profile</code>. From these, Draw keeps:
           </p>
           <ul className="list-disc space-y-1 pl-6">
             <li>your Google account ID, to find your account at the next sign-in,</li>
@@ -68,12 +68,12 @@ export function PrivacyPage() {
             <li>the address of your profile picture, which shows in the account menu.</li>
           </ul>
           <p>
-            draw does not keep Google access tokens or refresh tokens. It does not read your Gmail,
-            your Drive, your contacts or other Google data. After each sign-in, draw updates your
+            Draw does not keep Google access tokens or refresh tokens. It does not read your Gmail,
+            your Drive, your contacts or other Google data. After each sign-in, Draw updates your
             name, email address and picture from Google.
           </p>
           <p>
-            draw's use of information received from Google APIs adheres to the{" "}
+            Draw's use of information received from Google APIs adheres to the{" "}
             <a
               href="https://developers.google.com/terms/api-services-user-data-policy"
               className={linkClass}
@@ -86,7 +86,7 @@ export function PrivacyPage() {
 
         <Section title="Your drawings">
           <p>
-            draw keeps your projects, their versions, branches and pasted images, so that you can
+            Draw keeps your projects, their versions, branches and pasted images, so that you can
             open them again. Only you can open the projects of your workspace. Versions with no name
             are deleted 30 days after their last save. Named versions stay until you delete their
             branch.
@@ -96,7 +96,7 @@ export function PrivacyPage() {
         <Section title="Cookies and data in your browser">
           <ul className="list-disc space-y-1 pl-6">
             <li>
-              A session cookie keeps you signed in for 30 days. draw keeps only a hash of it. Sign
+              A session cookie keeps you signed in for 30 days. Draw keeps only a hash of it. Sign
               out deletes the session.
             </li>
             <li>A short cookie (10 minutes) protects the sign-in with Google.</li>
@@ -105,12 +105,12 @@ export function PrivacyPage() {
               address and picture (localStorage), so that you can draw offline.
             </li>
           </ul>
-          <p>draw has no advertising, no analytics and no tracking cookies.</p>
+          <p>Draw has no advertising, no analytics and no tracking cookies.</p>
         </Section>
 
         <Section title="Where the data is">
           <p>
-            draw runs on{" "}
+            Draw runs on{" "}
             <a href="https://www.cloudflare.com/privacypolicy/" className={linkClass}>
               Cloudflare
             </a>{" "}
@@ -122,7 +122,7 @@ export function PrivacyPage() {
             </a>
             .
           </p>
-          <p>draw does not sell, rent or share your data with other parties.</p>
+          <p>Draw does not sell, rent or share your data with other parties.</p>
         </Section>
 
         <Section title="Remove your data">
@@ -132,7 +132,7 @@ export function PrivacyPage() {
               {CONTACT_EMAIL}
             </a>{" "}
             from the address of your account. Your account, your sessions and your projects are then
-            deleted. You can also remove the access of draw at{" "}
+            deleted. You can also remove the access of Draw at{" "}
             <a href="https://myaccount.google.com/connections" className={linkClass}>
               myaccount.google.com/connections
             </a>
